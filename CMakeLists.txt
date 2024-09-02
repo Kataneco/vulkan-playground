@@ -67,6 +67,7 @@ add_executable(kitten main.cpp
         src/resource/ResourceTracker.cpp
         src/resource/ResourceTracker.h
         src/resource/ResourceBarrier.cpp
-        src/resource/ResourceBarrier.h)
+        src/resource/ResourceBarrier.h
+        lib/spirv_reflect.c)
 
 target_link_libraries(kitten glfw)
