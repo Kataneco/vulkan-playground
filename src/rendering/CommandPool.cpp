@@ -1,31 +1,40 @@
 #include "CommandPool.h"
 
-CommandPool::CommandPool(Device &device, uint32_t queueFamilyIndex, VkCommandPoolCreateFlags flags) : device(device) {
+CommandPool::CommandPool(VkDevice device, uint32_t queueFamilyIndex, VkCommandPoolCreateFlags flags) : device(device) {
     VkCommandPoolCreateInfo commandPoolCreateInfo{};
     commandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     commandPoolCreateInfo.flags = flags;
     commandPoolCreateInfo.queueFamilyIndex = queueFamilyIndex;
-
-    vkCreateCommandPool(device.getDevice(), &commandPoolCreateInfo, nullptr, &commandPool);
+    vkCreateCommandPool(device, &commandPoolCreateInfo, nullptr, &commandPool);
 }
 
 CommandPool::~CommandPool() {
-    vkDestroyCommandPool(device.getDevice(), commandPool, nullptr);
+    if (commandPool != VK_NULL_HANDLE) {
+        vkDestroyCommandPool(device, commandPool, nullptr);
+    }
 }
 
-VkCommandBuffer CommandPool::allocateCommandBuffer(VkCommandBufferLevel level) {
-    VkCommandBuffer commandBuffer;
-    VkCommandBufferAllocateInfo commandBufferAllocateInfo{};
-    commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    commandBufferAllocateInfo.commandPool = commandPool;
-    commandBufferAllocateInfo.level = level;
-    commandBufferAllocateInfo.commandBufferCount = 1;
-
-    vkAllocateCommandBuffers(device.getDevice(), &commandBufferAllocateInfo, &commandBuffer);
-    return commandBuffer;
+CommandPool::CommandPool(CommandPool &&other) noexcept : device(other.device), commandPool(other.commandPool) {
+    other.commandPool = VK_NULL_HANDLE;
 }
 
-std::vector<VkCommandBuffer> CommandPool::allocateCommandBuffers(uint32_t count, VkCommandBufferLevel level) {
+CommandPool &CommandPool::operator=(CommandPool &&other) noexcept {
+    if (this != &other) {
+        if (commandPool != VK_NULL_HANDLE) {
+            vkDestroyCommandPool(device, commandPool, nullptr);
+        }
+        device = other.device;
+        commandPool = other.commandPool;
+        other.commandPool = VK_NULL_HANDLE;
+    }
+    return *this;
+}
+
+CommandBuffer CommandPool::allocateCommandBuffer(VkCommandBufferLevel level) {
+    return {device, commandPool, level};
+}
+
+std::vector<CommandBuffer> CommandPool::allocateCommandBuffers(uint32_t count, VkCommandBufferLevel level) {
     std::vector<VkCommandBuffer> commandBuffers;
     commandBuffers.resize(count);
 
@@ -34,19 +43,17 @@ std::vector<VkCommandBuffer> CommandPool::allocateCommandBuffers(uint32_t count,
     commandBufferAllocateInfo.commandPool = commandPool;
     commandBufferAllocateInfo.level = level;
     commandBufferAllocateInfo.commandBufferCount = count;
+    vkAllocateCommandBuffers(device, &commandBufferAllocateInfo, commandBuffers.data());
 
-    vkAllocateCommandBuffers(device.getDevice(), &commandBufferAllocateInfo, commandBuffers.data());
-    return commandBuffers;
-}
+    std::vector<CommandBuffer> superCommandBuffers;
+    superCommandBuffers.reserve(count);
+    for (const auto& commandBuffer : commandBuffers) {
+        superCommandBuffers.emplace_back(device, commandPool, commandBuffer);
+    }
 
-void CommandPool::freeCommandBuffer(VkCommandBuffer commandBuffer) {
-    vkFreeCommandBuffers(device.getDevice(), commandPool, 1, &commandBuffer);
-}
-
-void CommandPool::freeCommandBuffers(const std::vector<VkCommandBuffer> &commandBuffers) {
-    vkFreeCommandBuffers(device.getDevice(), commandPool, commandBuffers.size(), commandBuffers.data());
+    return superCommandBuffers;
 }
 
 void CommandPool::reset(VkCommandPoolResetFlags flags) {
-    vkResetCommandPool(device.getDevice(), commandPool, flags);
+    vkResetCommandPool(device, commandPool, flags);
 }

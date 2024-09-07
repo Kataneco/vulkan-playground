@@ -14,8 +14,8 @@ add_executable(kitten main.cpp
         src/core/VulkanInstance.h
         src/core/Device.cpp
         src/core/Device.h
-        src/core/SwapchainManager.cpp
-        src/core/SwapchainManager.h
+        src/core/Swapchain.cpp
+        src/core/Swapchain.h
         src/pipeline/GraphicsPipelineBuilder.cpp
         src/pipeline/GraphicsPipelineBuilder.h
         src/pipeline/PipelineCache.cpp
@@ -68,6 +68,12 @@ add_executable(kitten main.cpp
         src/resource/ResourceTracker.h
         src/resource/ResourceBarrier.cpp
         src/resource/ResourceBarrier.h
-        lib/spirv_reflect.c)
+        lib/spirv_reflect.c
+        src/util/WindowManager.cpp
+        src/util/WindowManager.h
+        Engine.cpp
+        Engine.h
+        src/core/Queue.cpp
+        src/core/Queue.h)
 
 target_link_libraries(kitten glfw)

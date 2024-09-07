@@ -26,8 +26,8 @@ VkDescriptorSetLayoutCreateInfo DescriptorSetLayoutData::getCreateInfo() {
     return createInfo;
 }
 
-ShaderReflection::ShaderReflection(const std::vector<uint32_t> &spirvCode) {
-    SpvReflectResult result = spvReflectCreateShaderModule(spirvCode.size()*sizeof(uint32_t), spirvCode.data(), &module);
+ShaderReflection::ShaderReflection(const std::string &spirvCode) {
+    SpvReflectResult result = spvReflectCreateShaderModule(spirvCode.size(), spirvCode.data(), &module);
     if (result != SPV_REFLECT_RESULT_SUCCESS) {
         //death
     }

@@ -1,6 +1,10 @@
 #include "Device.h"
 
-Device::Device(VulkanInstance& vulkanInstance, VkPhysicalDeviceFeatures enabledFeatures, std::vector<const char *> deviceExtensions) : vulkanInstance(vulkanInstance) {
+Device::Device(VulkanInstance& vulkanInstance, VkPhysicalDeviceFeatures enabledFeatures, std::vector<const char*> deviceExtensions) : vulkanInstance(vulkanInstance) {
+    deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+    deviceExtensions.push_back(VK_KHR_MAINTENANCE_4_EXTENSION_NAME);
+    deviceExtensions.push_back(VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
+
     uint32_t ione = 1;
     vkEnumeratePhysicalDevices(vulkanInstance.instance, &ione, &physicalDevice);
 
@@ -61,4 +65,8 @@ Device::Device(VulkanInstance& vulkanInstance, VkPhysicalDeviceFeatures enabledF
 
 Device::~Device() {
     vkDestroyDevice(device, nullptr);
+}
+
+void Device::waitIdle() {
+    vkDeviceWaitIdle(device);
 }

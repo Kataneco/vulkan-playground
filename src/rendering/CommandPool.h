@@ -2,22 +2,26 @@
 #include "util/VulkanUtils.h"
 
 #include "core/Device.h"
+#include "CommandBuffer.h"
 
 class CommandPool {
 public:
-    explicit CommandPool(Device &device, uint32_t queueFamilyIndex, VkCommandPoolCreateFlags flags = 0);
+    CommandPool(VkDevice device, uint32_t queueFamilyIndex, VkCommandPoolCreateFlags flags = 0);
     ~CommandPool();
 
-    VkCommandPool getCommandPool() const { return commandPool; }
+    CommandPool(const CommandPool &) = delete;
+    CommandPool &operator=(const CommandPool &) = delete;
+    CommandPool(CommandPool &&other) noexcept;
+    CommandPool &operator=(CommandPool &&other) noexcept;
 
-    VkCommandBuffer allocateCommandBuffer(VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY);
-    std::vector<VkCommandBuffer> allocateCommandBuffers(uint32_t count, VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+    operator VkCommandPool() const { return commandPool; }
 
-    void freeCommandBuffer(VkCommandBuffer commandBuffer);
-    void freeCommandBuffers(const std::vector<VkCommandBuffer> &commandBuffers);
+    CommandBuffer allocateCommandBuffer(VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+    std::vector<CommandBuffer> allocateCommandBuffers(uint32_t count, VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+
     void reset(VkCommandPoolResetFlags flags = 0);
 
 private:
-    Device &device;
+    VkDevice device;
     VkCommandPool commandPool = VK_NULL_HANDLE;
 };

@@ -5,20 +5,25 @@
 
 class RenderPass {
 public:
-    explicit RenderPass(Device &device);
+    explicit RenderPass(VkDevice device);
     ~RenderPass();
+
+    RenderPass(const RenderPass &) = delete;
+    RenderPass &operator=(const RenderPass &) = delete;
+    RenderPass(RenderPass &&other) noexcept;
+    RenderPass &operator=(RenderPass &&other) noexcept;
 
     void create(const std::vector<VkAttachmentDescription> &attachments, const std::vector<VkSubpassDescription> &subpasses, const std::vector<VkSubpassDependency> &dependencies);
 
-    VkRenderPass getRenderPass() const { return renderPass; }
+    operator VkRenderPass() const { return renderPass; }
 
     void begin(VkCommandBuffer commandBuffer, VkFramebuffer framebuffer, const VkRect2D &renderArea, const std::vector<VkClearValue> &clearValues);
     void end(VkCommandBuffer commandBuffer);
 
-    static RenderPass createDefaultRenderPass(Device &device, VkFormat colorFormat, VkFormat depthFormat);
-    static RenderPass createOffscreenRenderPass(Device &device, VkFormat colorFormat);
+    static RenderPass createDefaultRenderPass(VkDevice device, VkFormat colorFormat, VkFormat depthFormat);
+    static RenderPass createOffscreenRenderPass(VkDevice device, VkFormat colorFormat);
 
 private:
-    Device &device;
+    VkDevice device;
     VkRenderPass renderPass = VK_NULL_HANDLE;
 };

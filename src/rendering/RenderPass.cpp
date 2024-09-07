@@ -1,9 +1,27 @@
 #include "RenderPass.h"
 
-RenderPass::RenderPass(Device &device) : device(device) {}
+RenderPass::RenderPass(VkDevice device) : device(device) {}
 
 RenderPass::~RenderPass() {
-    vkDestroyRenderPass(device.getDevice(), renderPass, nullptr);
+    if (renderPass != VK_NULL_HANDLE) {
+        vkDestroyRenderPass(device, renderPass, nullptr);
+    }
+}
+
+RenderPass::RenderPass(RenderPass &&other) noexcept : device(other.device), renderPass(other.renderPass) {
+    other.renderPass = VK_NULL_HANDLE;
+}
+
+RenderPass &RenderPass::operator=(RenderPass &&other) noexcept {
+    if (this != &other) {
+        if (renderPass != VK_NULL_HANDLE) {
+            vkDestroyRenderPass(device, renderPass, nullptr);
+        }
+        device = other.device;
+        renderPass = other.renderPass;
+        other.renderPass = VK_NULL_HANDLE;
+    }
+    return *this;
 }
 
 void RenderPass::create(const std::vector<VkAttachmentDescription> &attachments, const std::vector<VkSubpassDescription> &subpasses, const std::vector<VkSubpassDependency> &dependencies) {
@@ -16,7 +34,7 @@ void RenderPass::create(const std::vector<VkAttachmentDescription> &attachments,
     renderPassCreateInfo.dependencyCount = dependencies.size();
     renderPassCreateInfo.pDependencies = dependencies.data();
 
-    vkCreateRenderPass(device.getDevice(), &renderPassCreateInfo, nullptr, &renderPass);
+    vkCreateRenderPass(device, &renderPassCreateInfo, nullptr, &renderPass);
 }
 
 void RenderPass::begin(VkCommandBuffer commandBuffer, VkFramebuffer framebuffer, const VkRect2D &renderArea, const std::vector<VkClearValue> &clearValues) {

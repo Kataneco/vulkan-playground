@@ -3,10 +3,10 @@
 
 #include "core/Device.h"
 
-class SwapchainManager {
+class Swapchain {
 public:
-    explicit SwapchainManager(Device &device, VkSurfaceKHR surface);
-    ~SwapchainManager();
+    Swapchain(Device &device, VkSurfaceKHR surface);
+    ~Swapchain();
 
     void create(int width, int height);
     void destroy();
@@ -17,7 +17,7 @@ public:
     const std::vector<VkImageView> &getImageViews() const { return imageViews; }
 
     uint32_t acquireNextImage(VkSemaphore semaphore, VkFence fence);
-    void present(uint32_t imageIndex, VkSemaphore waitSemaphore);
+    uint32_t present(uint32_t imageIndex, VkSemaphore waitSemaphore);
 
 private:
     Device &device;

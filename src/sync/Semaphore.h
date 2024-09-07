@@ -11,6 +11,9 @@ public:
     Semaphore(Semaphore &&other) noexcept;
     Semaphore &operator=(Semaphore &&other) noexcept;
 
+    operator VkSemaphore() { return semaphore; }
+    operator VkSemaphore*() { return &semaphore; }
+
     VkSemaphore getSemaphore() const { return semaphore; }
 
 private:

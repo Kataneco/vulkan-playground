@@ -20,3 +20,5 @@
 #include "spirv_reflect.h"
 
 size_t hash_combine(size_t lhs, size_t rhs);
+
+std::string readFile(const char* filePath);

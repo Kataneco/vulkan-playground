@@ -3,8 +3,10 @@
 
 class VulkanInstance {
 public:
-    explicit VulkanInstance(uint32_t apiVersion, std::vector<const char *> instanceExtensions);
+    VulkanInstance(uint32_t apiVersion, std::vector<const char *> instanceExtensions);
     ~VulkanInstance();
+
+    operator VkInstance() const { return instance; }
 
 private:
     uint32_t apiVersion;

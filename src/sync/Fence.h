@@ -11,6 +11,9 @@ public:
     Fence(Fence &&other) noexcept;
     Fence &operator=(Fence &&other) noexcept;
 
+    operator VkFence() { return fence; }
+    operator VkFence*() { return &fence; }
+
     VkFence getFence() const { return fence; }
 
     void wait(uint64_t timeout = UINT64_MAX);

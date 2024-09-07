@@ -1,6 +1,6 @@
-#include "SwapchainManager.h"
+#include "Swapchain.h"
 
-SwapchainManager::SwapchainManager(Device &device, VkSurfaceKHR surface) : device(device), surface(surface) {
+Swapchain::Swapchain(Device &device, VkSurfaceKHR surface) : device(device), surface(surface) {
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device.physicalDevice, surface, &surfaceCapabilities);
     uint32_t formatCount;
     vkGetPhysicalDeviceSurfaceFormatsKHR(device.physicalDevice, surface, &formatCount, nullptr);
@@ -12,14 +12,14 @@ SwapchainManager::SwapchainManager(Device &device, VkSurfaceKHR surface) : devic
     vkGetPhysicalDeviceSurfacePresentModesKHR(device.physicalDevice, surface, &presentModeCount, presentModes.data());
 
     //XXX
-    imageFormat = VK_FORMAT_R8G8B8A8_SRGB;
+    imageFormat = VK_FORMAT_B8G8R8A8_SRGB;
 }
 
-SwapchainManager::~SwapchainManager() {
+Swapchain::~Swapchain() {
     destroy();
 }
 
-void SwapchainManager::create(int width, int height) {
+void Swapchain::create(int width, int height) {
     for (uint32_t i = 0; i < imageCount; ++i) {
         if (imageViews[i] != VK_NULL_HANDLE) {
             vkDestroyImageView(device.device, imageViews[i], nullptr);
@@ -29,6 +29,12 @@ void SwapchainManager::create(int width, int height) {
 
     extent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
 
+    VkSwapchainPresentScalingCreateInfoEXT swapchainPresentScalingCreateInfo{};
+    swapchainPresentScalingCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_SCALING_CREATE_INFO_EXT;
+    swapchainPresentScalingCreateInfo.scalingBehavior = VK_PRESENT_SCALING_STRETCH_BIT_EXT;
+    swapchainPresentScalingCreateInfo.presentGravityX = VK_PRESENT_GRAVITY_CENTERED_BIT_EXT;
+    swapchainPresentScalingCreateInfo.presentGravityY = VK_PRESENT_GRAVITY_CENTERED_BIT_EXT;
+
     VkSwapchainCreateInfoKHR swapchainCreateInfo{};
     swapchainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     swapchainCreateInfo.surface = surface;
@@ -37,15 +43,20 @@ void SwapchainManager::create(int width, int height) {
     swapchainCreateInfo.imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
     swapchainCreateInfo.imageExtent = extent;
     swapchainCreateInfo.imageArrayLayers = 1;
-    swapchainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
+    swapchainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     swapchainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     swapchainCreateInfo.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
     swapchainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    swapchainCreateInfo.presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
+    swapchainCreateInfo.presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
     swapchainCreateInfo.clipped = VK_TRUE;
     swapchainCreateInfo.oldSwapchain = swapchain;
 
-    vkCreateSwapchainKHR(device.device, &swapchainCreateInfo, nullptr, &swapchain);
+    swapchainCreateInfo.pNext = &swapchainPresentScalingCreateInfo;
+
+    vkCreateSwapchainKHR(device, &swapchainCreateInfo, nullptr, &swapchain);
+    if (swapchainCreateInfo.oldSwapchain != VK_NULL_HANDLE) {
+        vkDestroySwapchainKHR(device, swapchainCreateInfo.oldSwapchain, nullptr);
+    }
 
     vkGetSwapchainImagesKHR(device.device, swapchain, &imageCount, nullptr);
     images.resize(imageCount);
@@ -63,7 +74,7 @@ void SwapchainManager::create(int width, int height) {
     }
 }
 
-void SwapchainManager::destroy() {
+void Swapchain::destroy() {
     for (uint32_t i = 0; i < imageCount; ++i) {
         if (imageViews[i] != VK_NULL_HANDLE) {
             vkDestroyImageView(device.device, imageViews[i], nullptr);
@@ -76,7 +87,7 @@ void SwapchainManager::destroy() {
     }
 }
 
-uint32_t SwapchainManager::acquireNextImage(VkSemaphore semaphore, VkFence fence) {
+uint32_t Swapchain::acquireNextImage(VkSemaphore semaphore, VkFence fence) {
     uint32_t imageIndex;
     VkResult result = vkAcquireNextImageKHR(device.device, swapchain, UINT64_MAX, semaphore, fence, &imageIndex);
 
@@ -91,7 +102,7 @@ uint32_t SwapchainManager::acquireNextImage(VkSemaphore semaphore, VkFence fence
     return imageIndex;
 }
 
-void SwapchainManager::present(uint32_t imageIndex, VkSemaphore waitSemaphore) {
+uint32_t Swapchain::present(uint32_t imageIndex, VkSemaphore waitSemaphore) {
     VkPresentInfoKHR presentInfo{};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     presentInfo.swapchainCount = 1;
@@ -103,9 +114,11 @@ void SwapchainManager::present(uint32_t imageIndex, VkSemaphore waitSemaphore) {
     VkResult result = vkQueuePresentKHR(device.graphicsQueue, &presentInfo);
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
-        create(extent.width, extent.height);
+        //create(extent.width, extent.height);
+        return 1;
     } else if (result != VK_SUCCESS) {
         //death
-
+        return UINT32_MAX;
     }
+    return 0;
 }

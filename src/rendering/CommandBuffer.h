@@ -2,14 +2,20 @@
 #include "util/VulkanUtils.h"
 
 #include "core/Device.h"
-#include "CommandPool.h"
 
 class CommandBuffer {
 public:
-    CommandBuffer(Device &device, CommandPool &commandPool, VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+    CommandBuffer(VkDevice device, VkCommandPool commandPool, VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+    CommandBuffer(VkDevice device, VkCommandPool commandPool, VkCommandBuffer commandBuffer);
     ~CommandBuffer();
 
-    VkCommandBuffer getCommandBuffer() const { return commandBuffer; }
+    CommandBuffer(const CommandBuffer &) = delete;
+    CommandBuffer &operator=(const CommandBuffer &) = delete;
+    CommandBuffer(CommandBuffer &&other) noexcept;
+    CommandBuffer &operator=(CommandBuffer &&other) noexcept;
+
+    operator VkCommandBuffer() { return commandBuffer; }
+    operator VkCommandBuffer*() { return &commandBuffer; }
 
     void begin(VkCommandBufferUsageFlags flags = 0);
     void end();
@@ -25,7 +31,9 @@ public:
     void dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ);
 
 private:
-    Device &device;
-    CommandPool &commandPool;
+    VkDevice device;
+    VkCommandPool commandPool;
     VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+
+    friend class CommandPool;
 };

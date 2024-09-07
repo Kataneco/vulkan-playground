@@ -5,10 +5,10 @@
 
 class Device {
 public:
-    explicit Device(VulkanInstance &vulkanInstance, VkPhysicalDeviceFeatures enabledFeatures, std::vector<const char *> deviceExtensions);
+    Device(VulkanInstance &vulkanInstance, VkPhysicalDeviceFeatures enabledFeatures, std::vector<const char *> deviceExtensions);
     ~Device();
 
-    VkDevice getDevice() const { return device; }
+    operator VkDevice() const { return device; }
 
     uint32_t getGraphicsFamily() const { return graphicsFamily; }
     uint32_t getComputeFamily() const { return computeFamily; }
@@ -17,6 +17,8 @@ public:
     VkQueue getGraphicsQueue() const { return graphicsQueue; }
     VkQueue getComputeQueue() const { return computeQueue; }
     VkQueue getTransferQueue() const { return transferQueue; }
+
+    void waitIdle();
 
 private:
     VulkanInstance &vulkanInstance;
@@ -28,5 +30,5 @@ private:
     VkQueue graphicsQueue, computeQueue, transferQueue;
 
     friend class MemoryAllocator;
-    friend class SwapchainManager;
+    friend class Swapchain;
 };

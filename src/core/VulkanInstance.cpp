@@ -9,6 +9,8 @@ VulkanInstance::VulkanInstance(uint32_t apiVersion, std::vector<const char *> in
     volkInitialize();
 
     instanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    instanceExtensions.push_back(VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME);
+    instanceExtensions.push_back(VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME);
     std::vector<const char *> enabledLayers = {"VK_LAYER_KHRONOS_validation"};
 
     VkApplicationInfo applicationInfo{};

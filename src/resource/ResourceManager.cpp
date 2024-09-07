@@ -7,7 +7,7 @@ ResourceManager::~ResourceManager() {
 }
 
 std::shared_ptr<Buffer> ResourceManager::createBuffer(const VkBufferCreateInfo& bufferInfo, const VmaAllocationCreateInfo& allocInfo, const std::string& debugName) {
-    auto buffer = std::make_shared<Buffer>(device.getDevice(), memoryAllocator.getAllocator(), bufferInfo, allocInfo, debugName);
+    auto buffer = std::make_shared<Buffer>(device, memoryAllocator.getAllocator(), bufferInfo, allocInfo, debugName);
     if (!debugName.empty()) {
         setDebugName(VK_OBJECT_TYPE_BUFFER, (uint64_t) buffer->getBuffer(), debugName);
         buffers[debugName] = buffer;
@@ -16,7 +16,7 @@ std::shared_ptr<Buffer> ResourceManager::createBuffer(const VkBufferCreateInfo& 
 }
 
 std::shared_ptr<Image> ResourceManager::createImage(const VkImageCreateInfo& imageInfo, const VmaAllocationCreateInfo& allocInfo, const std::string& debugName) {
-    auto image = std::make_shared<Image>(device.getDevice(), memoryAllocator.getAllocator(), imageInfo, allocInfo, debugName);
+    auto image = std::make_shared<Image>(device, memoryAllocator.getAllocator(), imageInfo, allocInfo, debugName);
     if (!debugName.empty()) {
         setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t) image->getImage(), debugName);
         images[debugName] = image;
@@ -25,7 +25,7 @@ std::shared_ptr<Image> ResourceManager::createImage(const VkImageCreateInfo& ima
 }
 
 std::shared_ptr<Sampler> ResourceManager::createSampler(const VkSamplerCreateInfo& samplerInfo, const std::string& debugName) {
-    auto sampler = std::make_shared<Sampler>(device.getDevice(), samplerInfo, debugName);
+    auto sampler = std::make_shared<Sampler>(device, samplerInfo, debugName);
     if (!debugName.empty()) {
         setDebugName(VK_OBJECT_TYPE_SAMPLER, (uint64_t) sampler->getSampler(), debugName);
         samplers[debugName] = sampler;
@@ -82,5 +82,5 @@ void ResourceManager::setDebugName(VkObjectType objectType, uint64_t object, con
     nameInfo.objectHandle = object;
     nameInfo.pObjectName = name.c_str();
 
-    vkSetDebugUtilsObjectNameEXT(device.getDevice(), &nameInfo);
+    vkSetDebugUtilsObjectNameEXT(device, &nameInfo);
 }

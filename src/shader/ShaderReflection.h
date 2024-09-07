@@ -35,7 +35,7 @@ struct OutputVariable {
 
 class ShaderReflection {
 public:
-    explicit ShaderReflection(const std::vector<uint32_t> &spirvCode);
+    explicit ShaderReflection(const std::string &spirvCode);
     ~ShaderReflection();
 
     const std::vector<DescriptorSetLayoutData> &getDescriptorSetLayouts() const { return descriptorSetLayouts; }
