@@ -9,7 +9,7 @@ int main(int argc, char* argv[]) {
 
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    //glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
     //glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
     GLFWwindow *window = glfwCreateWindow(width, height, "I <3 You", nullptr, nullptr);
     //glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
@@ -77,15 +77,24 @@ int main(int argc, char* argv[]) {
     //descriptorSetData.insert(descriptorSetData.end(), fragmentShader.getDescriptorSetLayouts().begin(), fragmentShader.getDescriptorSetLayouts().end());
     VkPipelineLayout pipelineLayout = pipelineLayoutCache.createPipelineLayout({}, {});
 
+    VkViewport viewport{};
+    viewport.width = static_cast<float>(swapchain.getExtent().width);
+    viewport.height = static_cast<float>(swapchain.getExtent().height);
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+
+    VkRect2D scissor{};
+    scissor.extent = swapchain.getExtent();
+
     VkShaderModule vertModule = createShaderModule(device, vertCode), fragModule = createShaderModule(device, fragCode);
     VkPipeline pipeline = GraphicsPipelineBuilder()
             .setShaders(vertModule, fragModule)
             .setInputAssemblyState(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
-            //.setViewportState(viewport, scissor)
+            .setViewportState(viewport, scissor)
             .setRasterizationState(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE)
             .setMultisampleState(VK_SAMPLE_COUNT_1_BIT)
             //.setColorBlendState(colorBlendAttachment)
-            .setDynamicState({VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR})
+            //.setDynamicState({VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR})
             .setLayout(pipelineLayout)
             .setRenderPass(renderPass, 0)
             .build(device);
@@ -115,6 +124,7 @@ int main(int argc, char* argv[]) {
 
         uint32_t swapchainIndex = swapchain.acquireNextImage(swapchainLockSemaphore[frame], VK_NULL_HANDLE);
 
+        /*
         VkViewport viewport{};
         viewport.width = static_cast<float>(swapchain.getExtent().width);
         viewport.height = static_cast<float>(swapchain.getExtent().height);
@@ -123,14 +133,15 @@ int main(int argc, char* argv[]) {
 
         VkRect2D scissor{};
         scissor.extent = swapchain.getExtent();
+        */
 
         commandBuffer.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
         renderPass.begin(commandBuffer, framebuffers[frame], scissor, {{}});
 
         commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
-        vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-        vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+        //vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+        //vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
         commandBuffer.draw(3);
 
