@@ -7,7 +7,7 @@
 
 class ResourceManager {
 public:
-    ResourceManager(Device &device, MemoryAllocator &memoryAllocator);
+    explicit ResourceManager(Device &device, MemoryAllocator &memoryAllocator);
     ~ResourceManager();
 
     std::shared_ptr<Buffer> createBuffer(const VkBufferCreateInfo &bufferInfo, const VmaAllocationCreateInfo &allocInfo, const std::string &debugName = "");

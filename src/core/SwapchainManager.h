@@ -5,12 +5,10 @@
 
 class SwapchainManager {
 public:
-    SwapchainManager(Device &device, VkSurfaceKHR surface);
-
+    explicit SwapchainManager(Device &device, VkSurfaceKHR surface);
     ~SwapchainManager();
 
     void create(int width, int height);
-
     void destroy();
 
     VkFormat getImageFormat() const { return imageFormat; }

@@ -6,7 +6,7 @@
 
 class PipelineLayoutCache {
 public:
-    PipelineLayoutCache(VkDevice device, DescriptorLayoutCache& descriptorLayoutCache);
+    explicit PipelineLayoutCache(VkDevice device, DescriptorLayoutCache& descriptorLayoutCache);
     ~PipelineLayoutCache();
     void destroy();
 

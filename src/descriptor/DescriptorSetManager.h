@@ -5,7 +5,7 @@
 
 class DescriptorAllocator {
 public:
-    DescriptorAllocator(VkDevice device);
+    explicit DescriptorAllocator(VkDevice device);
     ~DescriptorAllocator();
     void destroy();
 
@@ -44,7 +44,7 @@ private:
 
 class DescriptorLayoutCache {
 public:
-    DescriptorLayoutCache(VkDevice device);
+    explicit DescriptorLayoutCache(VkDevice device);
     ~DescriptorLayoutCache();
     void destroy();
 
@@ -57,7 +57,7 @@ private:
 
 class DescriptorBuilder {
 public:
-    DescriptorBuilder(DescriptorLayoutCache &cache, DescriptorAllocator &alloc);
+    explicit DescriptorBuilder(DescriptorLayoutCache &cache, DescriptorAllocator &alloc);
 
     DescriptorBuilder &bind_buffer(uint32_t binding, VkDescriptorBufferInfo *bufferInfo, VkDescriptorType type, VkShaderStageFlags stageFlags);
     DescriptorBuilder &bind_image(uint32_t binding, VkDescriptorImageInfo *imageInfo, VkDescriptorType type, VkShaderStageFlags stageFlags);
