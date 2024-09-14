@@ -9,7 +9,7 @@ public:
     explicit MemoryAllocator(VulkanInstance &vulkanInstance, Device &device);
     ~MemoryAllocator();
 
-    VmaAllocator getAllocator() const { return allocator; }
+    operator VmaAllocator() const { return allocator; }
 
 private:
     VulkanInstance &vulkanInstance;

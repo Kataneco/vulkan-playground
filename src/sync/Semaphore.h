@@ -14,8 +14,6 @@ public:
     operator VkSemaphore() { return semaphore; }
     operator VkSemaphore*() { return &semaphore; }
 
-    VkSemaphore getSemaphore() const { return semaphore; }
-
 private:
     VkDevice device;
     VkSemaphore semaphore;

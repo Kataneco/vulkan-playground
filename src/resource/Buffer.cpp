@@ -1,7 +1,6 @@
 #include "Buffer.h"
 
-Buffer::Buffer(VkDevice device, VmaAllocator allocator, const VkBufferCreateInfo &bufferInfo, const VmaAllocationCreateInfo &allocInfo, const std::string &name)
-: Resource(device, name), allocator(allocator), size(bufferInfo.size) {
+Buffer::Buffer(VkDevice device, VmaAllocator allocator, const VkBufferCreateInfo &bufferInfo, const VmaAllocationCreateInfo &allocInfo, const std::string &name) : Resource(device, name), allocator(allocator), size(bufferInfo.size) {
     vmaCreateBuffer(allocator, &bufferInfo, &allocInfo, &buffer, &allocation, nullptr);
 }
 
@@ -25,4 +24,8 @@ void* Buffer::map() {
 
 void Buffer::unmap() {
     vmaUnmapMemory(allocator, allocation);
+}
+
+void Buffer::flush(VkDeviceSize offset, VkDeviceSize size) {
+    vmaFlushAllocation(allocator, allocation, offset, size);
 }

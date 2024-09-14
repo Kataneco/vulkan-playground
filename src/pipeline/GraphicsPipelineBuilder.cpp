@@ -19,13 +19,13 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::setShaders(VkShaderModule vert
     return *this;
 }
 
-GraphicsPipelineBuilder& GraphicsPipelineBuilder::setVertexInputState(const VkVertexInputBindingDescription& bindingDesc, const std::vector<VkVertexInputAttributeDescription>& attributeDescs) {
-    bindingDescription = bindingDesc;
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::setVertexInputState(const std::vector<VkVertexInputBindingDescription>& bindingDescs, const std::vector<VkVertexInputAttributeDescription>& attributeDescs) {
+    bindingDescriptions = bindingDescs;
     attributeDescriptions = attributeDescs;
 
     vertexInputState.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInputState.vertexBindingDescriptionCount = 1;
-    vertexInputState.pVertexBindingDescriptions = &bindingDescription;
+    vertexInputState.vertexBindingDescriptionCount = bindingDescriptions.size();
+    vertexInputState.pVertexBindingDescriptions = bindingDescriptions.data();
     vertexInputState.vertexAttributeDescriptionCount = attributeDescriptions.size();
     vertexInputState.pVertexAttributeDescriptions = attributeDescriptions.data();
     return *this;

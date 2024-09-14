@@ -7,7 +7,7 @@ ResourceManager::~ResourceManager() {
 }
 
 std::shared_ptr<Buffer> ResourceManager::createBuffer(const VkBufferCreateInfo& bufferInfo, const VmaAllocationCreateInfo& allocInfo, const std::string& debugName) {
-    auto buffer = std::make_shared<Buffer>(device, memoryAllocator.getAllocator(), bufferInfo, allocInfo, debugName);
+    auto buffer = std::make_shared<Buffer>(device, memoryAllocator, bufferInfo, allocInfo, debugName);
     if (!debugName.empty()) {
         setDebugName(VK_OBJECT_TYPE_BUFFER, (uint64_t) buffer->getBuffer(), debugName);
         buffers[debugName] = buffer;
@@ -16,7 +16,7 @@ std::shared_ptr<Buffer> ResourceManager::createBuffer(const VkBufferCreateInfo& 
 }
 
 std::shared_ptr<Image> ResourceManager::createImage(const VkImageCreateInfo& imageInfo, const VmaAllocationCreateInfo& allocInfo, const std::string& debugName) {
-    auto image = std::make_shared<Image>(device, memoryAllocator.getAllocator(), imageInfo, allocInfo, debugName);
+    auto image = std::make_shared<Image>(device, memoryAllocator, imageInfo, allocInfo, debugName);
     if (!debugName.empty()) {
         setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t) image->getImage(), debugName);
         images[debugName] = image;

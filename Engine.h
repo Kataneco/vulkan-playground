@@ -20,3 +20,6 @@
 #include "shader/ShaderReflection.h"
 #include "sync/Fence.h"
 #include "sync/Semaphore.h"
+#include "scene/Mesh.h"
+#include "scene/Material.h"
+#include "scene/Scene.h"

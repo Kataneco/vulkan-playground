@@ -17,7 +17,7 @@ public:
 
     void *map();
     void unmap();
-    void flush();
+    void flush(VkDeviceSize offset = 0, VkDeviceSize size = VK_WHOLE_SIZE);
 
 private:
     VmaAllocator allocator;
