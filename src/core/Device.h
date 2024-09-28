@@ -9,6 +9,7 @@ public:
     ~Device();
 
     operator VkDevice() const { return device; }
+    operator VkPhysicalDevice() const { return physicalDevice; }
 
     uint32_t getGraphicsFamily() const { return graphicsFamily; }
     uint32_t getComputeFamily() const { return computeFamily; }
@@ -19,6 +20,8 @@ public:
     VkQueue getTransferQueue() const { return transferQueue; }
 
     void waitIdle();
+
+    uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
 
 private:
     VulkanInstance &vulkanInstance;

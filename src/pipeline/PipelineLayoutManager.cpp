@@ -12,9 +12,25 @@ void PipelineLayoutCache::destroy() {
     }
 }
 
-VkPipelineLayout PipelineLayoutCache::createPipelineLayout(std::vector<DescriptorSetLayoutData> descriptorSetLayoutData, std::vector<VkPushConstantRange> pushConstantRanges) {
+VkPipelineLayout PipelineLayoutCache::createPipelineLayout(const std::vector<DescriptorSetLayoutData>& descriptorSetLayoutData, std::vector<VkPushConstantRange> pushConstantRanges) {
+    std::unordered_map<uint32_t, DescriptorSetLayoutData> sets;
+    for (const auto &d : descriptorSetLayoutData) {
+        if (!sets.contains(d.set)) {
+            sets[d.set] = d;
+            continue;
+        }
+        for (const auto &b: d.bindings) {
+            for (auto &db: sets[d.set].bindings) {
+                if (b.binding == db.binding) {
+                    db.stageFlags |= b.stageFlags;
+                    break;
+                }
+            }
+        }
+    }
+
     size_t hash = 0x517cc1b727220a95;
-    for (const auto &d: descriptorSetLayoutData) {
+    for (const auto &[key, d]: sets) {
         hash = hash_combine(hash, std::hash<DescriptorSetLayoutData>()(d));
     }
     for (const auto &p: pushConstantRanges) {
@@ -28,8 +44,8 @@ VkPipelineLayout PipelineLayoutCache::createPipelineLayout(std::vector<Descripto
         return (*it).second;
 
     std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
-    descriptorSetLayouts.reserve(descriptorSetLayoutData.size());
-    for (auto &data: descriptorSetLayoutData) {
+    descriptorSetLayouts.reserve(sets.size());
+    for (auto &[key, data]: sets) {
         auto dsci = data.getCreateInfo();
         descriptorSetLayouts.push_back(descriptorLayoutCache.createDescriptorLayout(&dsci));
     }

@@ -10,7 +10,7 @@ public:
     ~PipelineLayoutCache();
     void destroy();
 
-    VkPipelineLayout createPipelineLayout(std::vector<DescriptorSetLayoutData> descriptorSetLayoutData, std::vector<VkPushConstantRange> pushConstantRanges);
+    VkPipelineLayout createPipelineLayout(const std::vector<DescriptorSetLayoutData>& descriptorSetLayoutData, std::vector<VkPushConstantRange> pushConstantRanges);
 
 private:
     VkDevice device;

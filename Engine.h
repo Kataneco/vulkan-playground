@@ -1,6 +1,5 @@
 #pragma once
 #include "util/VulkanUtils.h"
-#include "util/WindowManager.h"
 #include "core/VulkanInstance.h"
 #include "core/Device.h"
 #include "core/Swapchain.h"
@@ -23,3 +22,14 @@
 #include "scene/Mesh.h"
 #include "scene/Material.h"
 #include "scene/Scene.h"
+#include "core/Queue.h"
+#include "resource/StagingBufferManager.h"
+#include "scene/MeshRenderer.h"
+#include "util/Window.h"
+
+class Engine {
+public:
+    explicit Engine();
+    ~Engine();
+private:
+};
