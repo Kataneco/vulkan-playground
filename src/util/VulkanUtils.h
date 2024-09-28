@@ -1,4 +1,11 @@
 #pragma once
+
+#ifdef KITTY_MAIN
+#define VOLK_IMPLEMENTATION
+#define VMA_IMPLEMENTATION
+#define TINYOBJLOADER_IMPLEMENTATION
+#endif
+
 #include <iostream>
 #include <fstream>
 #include <chrono>
@@ -8,9 +15,13 @@
 #include <cmath>
 #include <memory>
 #include <algorithm>
+#include <queue>
 
 #define VK_NO_PROTOTYPES
 #include "volk.h"
+
+#define GLFW_INCLUDE_NONE
+#include <GLFW/glfw3.h>
 
 #define VMA_STATIC_VULKAN_FUNCTIONS 0
 #define VMA_DYNAMIC_VULKAN_FUNCTIONS 0
@@ -28,6 +39,7 @@
 #include <glm/gtx/hash.hpp>
 
 #include "tiny_obj_loader.h"
+#include "stb_image.h"
 
 size_t hash_combine(size_t lhs, size_t rhs);
 

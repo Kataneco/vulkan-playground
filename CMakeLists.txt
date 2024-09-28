@@ -69,11 +69,16 @@ add_executable(kitten main.cpp
         src/resource/ResourceBarrier.cpp
         src/resource/ResourceBarrier.h
         lib/spirv_reflect.c
-        src/util/WindowManager.cpp
-        src/util/WindowManager.h
         Engine.cpp
         Engine.h
         src/core/Queue.cpp
-        src/core/Queue.h)
+        src/core/Queue.h
+        src/scene/MeshRenderer.cpp
+        src/scene/MeshRenderer.h
+        lib/stb_image.h
+        src/util/Window.cpp
+        src/util/Window.h
+        src/resource/Texture.cpp
+        src/resource/Texture.h)
 
 target_link_libraries(kitten glfw)

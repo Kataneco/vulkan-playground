@@ -29,13 +29,10 @@ Mesh Mesh::loadObj(const std::string& filePath) {
                     attrib.normals[3 * index.vertex_index + 2]
             };
 
-            vertex.color = {
-                    //attrib.texcoords[2 * index.texcoord_index + 0],
-                    //1.0f - attrib.texcoords[2 * index.texcoord_index + 1],
-                    //1.0f
+            vertex.texCoords = {
+                    attrib.texcoords[2 * index.texcoord_index + 0],
+                    1.0f - attrib.texcoords[2 * index.texcoord_index + 1],
             };
-
-            vertex.color = {1,1,1};
 
             if (uniqueVertices.count(vertex) == 0) {
                 uniqueVertices[vertex] = static_cast<uint32_t>(mesh.vertices.size());
@@ -46,4 +43,12 @@ Mesh Mesh::loadObj(const std::string& filePath) {
         }
     }
     return mesh;
+}
+
+void Mesh::pushMesh(ResourceManager &resourceManager, StagingBufferManager& stagingBufferManager) {
+    vertexBuffer = resourceManager.createBuffer({.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = vertices.size() * sizeof(vertices[0]), .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT}, {.usage = VMA_MEMORY_USAGE_AUTO});
+    indexBuffer = resourceManager.createBuffer({.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = indices.size() * sizeof(indices[0]), .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT}, {.usage = VMA_MEMORY_USAGE_AUTO});
+    stagingBufferManager.stageData(vertices.data(), vertexBuffer->getBuffer(), vertices.size()*sizeof(vertices[0]));
+    stagingBufferManager.stageData(indices.data(), indexBuffer->getBuffer(), indices.size()*sizeof(indices[0]));
+    stagingBufferManager.flush();
 }

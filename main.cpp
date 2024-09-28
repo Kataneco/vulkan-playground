@@ -1,6 +1,4 @@
-#define VOLK_IMPLEMENTATION
-#define VMA_IMPLEMENTATION
-#define TINYOBJLOADER_IMPLEMENTATION
+#define KITTY_MAIN
 #include "Engine.h"
 
 int main(int argc, char* argv[]) {
@@ -13,20 +11,21 @@ int main(int argc, char* argv[]) {
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
     //glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
-    GLFWwindow *window = glfwCreateWindow(width, height, "I <3 You", nullptr, nullptr);
-    //glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    Window window(width, height);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     uint32_t glfwExtensionCount = 0;
     const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
     std::vector<const char*> instanceExtensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
     VulkanInstance instance(VK_API_VERSION_1_3, instanceExtensions);
 
-    Device device(instance, {.samplerAnisotropy = VK_TRUE}, {});
+    Device device(instance, {.samplerAnisotropy = VK_TRUE, .vertexPipelineStoresAndAtomics = VK_TRUE, .fragmentStoresAndAtomics = VK_TRUE, .fillModeNonSolid = VK_TRUE}, {});
 
     DescriptorLayoutCache descriptorLayoutCache(device);
     DescriptorAllocator descriptorAllocator(device);
     MemoryAllocator memoryAllocator(instance, device);
     ResourceManager resourceManager(device, memoryAllocator);
+    StagingBufferManager stagingBufferManager(device);
     CommandPool commandPool(device, device.getGraphicsFamily(), VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
     PipelineLayoutCache pipelineLayoutCache(device, descriptorLayoutCache);
 
@@ -133,7 +132,7 @@ int main(int argc, char* argv[]) {
             .setVertexInputState({{0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX}}, {
                     {0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, position)},
                     {1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, normal)},
-                    {2, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, color)}
+                    {2, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, texCoords)}
             })
             .setInputAssemblyState(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
             .setViewportState(viewport, scissor)
@@ -157,44 +156,10 @@ int main(int argc, char* argv[]) {
 
     std::vector<CommandBuffer> commandBuffers = commandPool.allocateCommandBuffers(swapchain.getImageCount());
 
-    CommandBuffer transferCommandBuffer = commandPool.allocateCommandBuffer();
-    Mesh testingMesh = Mesh::loadObj("../dragon.obj");
-    auto vertexBuffer = resourceManager.createBuffer({.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = testingMesh.vertices.size()*sizeof(testingMesh.vertices[0]), .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT}, {.usage = VMA_MEMORY_USAGE_AUTO});
-    auto indexBuffer = resourceManager.createBuffer({.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = testingMesh.indices.size()*sizeof(testingMesh.indices[0]), .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT}, {.usage = VMA_MEMORY_USAGE_AUTO});
+    Mesh testingMesh = Mesh::loadObj("/home/honeywrap/Documents/kitten/assets/Interior/interior.obj");
+    testingMesh.pushMesh(resourceManager, stagingBufferManager);
 
-    auto stagingBuffer = resourceManager.createBuffer({.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = 134217728, .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT}, {.usage = VMA_MEMORY_USAGE_AUTO, .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT});
-    void *mappedStagingBuffer = stagingBuffer->map();
-    memcpy(mappedStagingBuffer, testingMesh.vertices.data(), testingMesh.vertices.size()*sizeof(testingMesh.vertices[0]));
-    stagingBuffer->flush();
-
-    transferCommandBuffer.begin();
-    VkBufferCopy bufferCopy{0,0,testingMesh.vertices.size()*sizeof(testingMesh.vertices[0])};
-    vkCmdCopyBuffer(transferCommandBuffer, stagingBuffer->getBuffer(), vertexBuffer->getBuffer(), 1, &bufferCopy);
-    transferCommandBuffer.end();
-    transferCommandBuffer.submit(device.getGraphicsQueue());
-
-    vkQueueWaitIdle(device.getGraphicsQueue());
-
-    memcpy(mappedStagingBuffer, testingMesh.indices.data(), testingMesh.indices.size()*sizeof(testingMesh.indices[0]));
-    stagingBuffer->flush();
-
-    transferCommandBuffer.begin();
-    bufferCopy = {0,0,testingMesh.indices.size()*sizeof(testingMesh.indices[0])};
-    vkCmdCopyBuffer(transferCommandBuffer, stagingBuffer->getBuffer(), indexBuffer->getBuffer(), 1, &bufferCopy);
-    transferCommandBuffer.end();
-    transferCommandBuffer.submit(device.getGraphicsQueue());
-
-    vkQueueWaitIdle(device.getGraphicsQueue());
-
-    stagingBuffer->unmap();
-
-    auto atomicCounterBuffer = resourceManager.createBuffer({.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = 8, .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT}, {.usage = VMA_MEMORY_USAGE_GPU_ONLY});
-    VkDescriptorBufferInfo atomicCounterDescriptorBufferInfo{atomicCounterBuffer->getBuffer(), 0, VK_WHOLE_SIZE};
-    VkDescriptorSet atomicCounterDescriptorSet;
-    DescriptorBuilder(descriptorLayoutCache, descriptorAllocator).bind_buffer(0, &atomicCounterDescriptorBufferInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT).build(atomicCounterDescriptorSet);
-    VkDescriptorSet VatomicCounterDescriptorSet;
-    DescriptorBuilder(descriptorLayoutCache, descriptorAllocator).bind_buffer(0, &atomicCounterDescriptorBufferInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT).build(VatomicCounterDescriptorSet);
-
+    MeshRenderer tMeshRenderer(testingMesh, {{pipeline, pipelineLayout}});
 
     //Main rendering loop
     uint32_t frame = 0;
@@ -207,7 +172,7 @@ int main(int argc, char* argv[]) {
     //Camera
     float sensitivity = 0.1f;
     float lastX = 0.0f, lastY = 0.0f;
-    float speed = 0.5f;
+    float speed = 10.0f;
     float yaw = 0.0f, pitch = 0.0f;
     glm::vec3 camera = {0.0f, 0.0f, -1.0f};
     while (!glfwWindowShouldClose(window)) {
@@ -237,9 +202,7 @@ int main(int argc, char* argv[]) {
         scissor.extent = swapchain.getExtent();
 
         commandBuffer.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-        renderPass.begin(commandBuffer, framebuffers[frame], scissor, {{}, {.depthStencil = {1.0f, 0}}});
-
-        commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+        renderPass.begin(commandBuffer, framebuffers[frame], scissor, {{.color = {0.9f, 0.9f, 0.9f}}, {.depthStencil = {1.0f, 0}}});
 
         //vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
         //vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
@@ -273,22 +236,17 @@ int main(int argc, char* argv[]) {
         if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) camera.y += speed*deltaTime;
         if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) camera.y -= speed*deltaTime;
 
-        glm::mat4 model = glm::scale(glm::vec3(1,1,1))*glm::rotate(glm::radians(time*2.5f), glm::vec3(0.0f, 1.0f, 0.0f))*glm::translate(glm::vec3(0,0,0));
+        glm::mat4 model = glm::scale(glm::vec3(0.42f,0.42f,0.42f))*glm::rotate(glm::radians(time*2.5f*0), glm::vec3(0.0f, 1.0f, 0.0f))*glm::translate(glm::vec3(0,0,0));
         glm::mat4 view = glm::lookAt(camera, camera+glm::normalize(direction), glm::vec3(0,1,0));
-        glm::mat4 projection = glm::perspective(glm::radians(70.0f), (float)width/(float)height, 0.01f, 100.0f);
+        glm::mat4 projection = glm::perspective(glm::radians(75.0f), (float)width/(float)height, 0.01f, 5000.0f);
         projection[1][1] *= -1;
 
         glm::mat4 renderMatrix = projection*view*model;
 
         vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(renderMatrix), &renderMatrix);
+        vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, sizeof(glm::mat4), sizeof(time), &time);
 
-        double pushtime = static_cast<double>(time);
-        vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, sizeof(glm::mat4), sizeof(double), &pushtime);
-
-        commandBuffer.bindVertexBuffers(0, {vertexBuffer->getBuffer()}, {0});
-        commandBuffer.bindIndexBuffer(indexBuffer->getBuffer(), 0, VK_INDEX_TYPE_UINT32);
-        commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, {VatomicCounterDescriptorSet, atomicCounterDescriptorSet});
-        commandBuffer.drawIndexed(testingMesh.indices.size());
+        tMeshRenderer.render(commandBuffer);
 
         renderPass.end(commandBuffer);
         commandBuffer.end();
