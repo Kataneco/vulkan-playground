@@ -4,6 +4,7 @@
 #define VOLK_IMPLEMENTATION
 #define VMA_IMPLEMENTATION
 #define TINYOBJLOADER_IMPLEMENTATION
+#define STB_IMAGE_IMPLEMENTATION
 #endif
 
 #include <iostream>

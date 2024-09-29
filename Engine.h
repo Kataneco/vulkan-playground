@@ -26,6 +26,8 @@
 #include "resource/StagingBufferManager.h"
 #include "scene/MeshRenderer.h"
 #include "util/Window.h"
+#include "resource/Texture.h"
+#include "resource/ResourceBarrier.h"
 
 class Engine {
 public:

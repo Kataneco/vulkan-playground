@@ -17,13 +17,18 @@ StagingBufferManager::~StagingBufferManager() {
     vkDestroyFence(device, transferFence, nullptr);
 }
 
-void StagingBufferManager::stageData(void *srcData, VkBuffer dstBuffer, VkDeviceSize size, VkDeviceSize dstOffset) {
-    operationQueue.push({srcData, dstBuffer, size, dstOffset});
+void StagingBufferManager::stageBufferData(void *srcData, VkBuffer dstBuffer, VkDeviceSize size, VkDeviceSize dstOffset) {
+    operationQueue.push({srcData, dstBuffer, nullptr, size, dstOffset, {}, {}, {}, false});
+}
+
+void StagingBufferManager::stageImageData(void *srcData, VkImage dstImage, VkDeviceSize size, const VkImageSubresourceLayers &subresource, const VkOffset3D &offset, const VkExtent3D &extent) {
+    operationQueue.push({srcData, nullptr, dstImage, size, 0, subresource, offset, extent, true});
 }
 
 void StagingBufferManager::flush() {
     VkDeviceSize currentOffset = 0;
-    std::vector<BufferCopyInfo> copies;
+    std::vector<BufferCopyInfo> bufferCopies;
+    std::vector<ImageCopyInfo> imageCopies;
 
     while (!operationQueue.empty()) {
         auto &op = operationQueue.front();
@@ -36,15 +41,28 @@ void StagingBufferManager::flush() {
 
             void *srcDataOffset = static_cast<char*>(op.srcData) + srcOffset;
             copyToStagingBuffer(srcDataOffset, copySize, currentOffset);
-            copies.push_back({op.dstBuffer, {currentOffset, op.dstOffset + srcOffset, copySize}});
+
+            if (op.isImage) {
+                VkBufferImageCopy imageCopyRegion{};
+                imageCopyRegion.bufferOffset = currentOffset;
+                imageCopyRegion.bufferRowLength = 0;
+                imageCopyRegion.bufferImageHeight = 0;
+                imageCopyRegion.imageSubresource = op.imageSubresource;
+                imageCopyRegion.imageOffset = op.imageOffset;
+                imageCopyRegion.imageExtent = op.imageExtent;
+                imageCopies.push_back({op.dstImage, imageCopyRegion});
+            } else {
+                bufferCopies.push_back({op.dstBuffer, {currentOffset, op.dstOffset + srcOffset, copySize}});
+            }
 
             currentOffset += copySize;
             remainingSize -= copySize;
             srcOffset += copySize;
 
             if (currentOffset == stagingBufferSize) {
-                submitAndWait(copies);
-                copies.clear();
+                submitAndWait(bufferCopies, imageCopies);
+                bufferCopies.clear();
+                imageCopies.clear();
                 currentOffset = 0;
             }
         }
@@ -52,8 +70,8 @@ void StagingBufferManager::flush() {
         operationQueue.pop();
     }
 
-    if (!copies.empty()) {
-        submitAndWait(copies);
+    if (!bufferCopies.empty() || !imageCopies.empty()) {
+        submitAndWait(bufferCopies, imageCopies);
     }
 }
 
@@ -116,7 +134,7 @@ void StagingBufferManager::copyToStagingBuffer(void *srcData, VkDeviceSize size,
     memcpy(static_cast<char*>(mappedData) + offset, srcData, static_cast<size_t>(size));
 }
 
-void StagingBufferManager::submitAndWait(const std::vector<BufferCopyInfo> &copies) {
+void StagingBufferManager::submitAndWait(const std::vector<BufferCopyInfo> &bufferCopies, const std::vector<ImageCopyInfo> &imageCopies) {
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
@@ -124,62 +142,105 @@ void StagingBufferManager::submitAndWait(const std::vector<BufferCopyInfo> &copi
     vkResetCommandBuffer(commandBuffer, 0);
     vkBeginCommandBuffer(commandBuffer, &beginInfo);
 
-    std::vector<VkBufferMemoryBarrier> preCopyBarriers;
-    preCopyBarriers.reserve(copies.size());
-    std::vector<VkBufferMemoryBarrier> postCopyBarriers;
-    postCopyBarriers.reserve(copies.size());
+    std::vector<VkBufferMemoryBarrier> preCopyBufferBarriers;
+    std::vector<VkImageMemoryBarrier> preCopyImageBarriers;
+    std::vector<VkBufferMemoryBarrier> postCopyBufferBarriers;
+    std::vector<VkImageMemoryBarrier> postCopyImageBarriers;
 
-    for (const auto& copy : copies) {
-        VkBufferMemoryBarrier preCopyBarrier{};
-        preCopyBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-        preCopyBarrier.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
-        preCopyBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        preCopyBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_EXTERNAL;
-        preCopyBarrier.dstQueueFamilyIndex = device.getTransferFamily();
-        preCopyBarrier.buffer = copy.dstBuffer;
-        preCopyBarrier.offset = copy.copyRegion.dstOffset;
-        preCopyBarrier.size = copy.copyRegion.size;
-
-        preCopyBarriers.push_back(preCopyBarrier);
-
-        VkBufferMemoryBarrier postCopyBarrier{};
-        postCopyBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-        postCopyBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        postCopyBarrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
-        postCopyBarrier.srcQueueFamilyIndex = device.getTransferFamily();
-        postCopyBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_EXTERNAL;
-        postCopyBarrier.buffer = copy.dstBuffer;
-        postCopyBarrier.offset = copy.copyRegion.dstOffset;
-        postCopyBarrier.size = copy.copyRegion.size;
-
-        postCopyBarriers.push_back(postCopyBarrier);
+    // Set up pre-copy barriers
+    for (const auto& copy : bufferCopies) {
+        VkBufferMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+        barrier.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_EXTERNAL;
+        barrier.dstQueueFamilyIndex = device.getTransferFamily();
+        barrier.buffer = copy.dstBuffer;
+        barrier.offset = copy.copyRegion.dstOffset;
+        barrier.size = copy.copyRegion.size;
+        preCopyBufferBarriers.push_back(barrier);
     }
 
-    if (!preCopyBarriers.empty()) {
-        vkCmdPipelineBarrier(
-                commandBuffer,
-                VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                VK_PIPELINE_STAGE_TRANSFER_BIT,
-                0,
-                0, nullptr,
-                static_cast<uint32_t>(preCopyBarriers.size()), preCopyBarriers.data(),
-                0, nullptr);
+    for (const auto& copy : imageCopies) {
+        VkImageMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_EXTERNAL;
+        barrier.dstQueueFamilyIndex = device.getTransferFamily();
+        barrier.image = copy.dstImage;
+        barrier.subresourceRange.aspectMask = copy.copyRegion.imageSubresource.aspectMask;
+        barrier.subresourceRange.baseMipLevel = copy.copyRegion.imageSubresource.mipLevel;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = copy.copyRegion.imageSubresource.baseArrayLayer;
+        barrier.subresourceRange.layerCount = copy.copyRegion.imageSubresource.layerCount;
+        preCopyImageBarriers.push_back(barrier);
     }
 
-    for (const auto& copy : copies) {
+    // Apply pre-copy barriers
+    vkCmdPipelineBarrier(
+            commandBuffer,
+            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0,
+            0, nullptr,
+            static_cast<uint32_t>(preCopyBufferBarriers.size()), preCopyBufferBarriers.data(),
+            static_cast<uint32_t>(preCopyImageBarriers.size()), preCopyImageBarriers.data()
+    );
+
+    // Perform copies
+    for (const auto& copy : bufferCopies) {
         vkCmdCopyBuffer(commandBuffer, stagingBuffer, copy.dstBuffer, 1, &copy.copyRegion);
     }
 
-    if (!postCopyBarriers.empty()) {
-        vkCmdPipelineBarrier(
-                commandBuffer,
-                VK_PIPELINE_STAGE_TRANSFER_BIT,
-                VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                0,
-                0, nullptr,
-                static_cast<uint32_t>(postCopyBarriers.size()), postCopyBarriers.data(),
-                0, nullptr);
+    for (const auto& copy : imageCopies) {
+        vkCmdCopyBufferToImage(commandBuffer, stagingBuffer, copy.dstImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy.copyRegion);
     }
+
+    // Set up post-copy barriers
+    for (const auto& copy : bufferCopies) {
+        VkBufferMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
+        barrier.srcQueueFamilyIndex = device.getTransferFamily();
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_EXTERNAL;
+        barrier.buffer = copy.dstBuffer;
+        barrier.offset = copy.copyRegion.dstOffset;
+        barrier.size = copy.copyRegion.size;
+        postCopyBufferBarriers.push_back(barrier);
+    }
+
+    for (const auto& copy : imageCopies) {
+        VkImageMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcQueueFamilyIndex = device.getTransferFamily();
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_EXTERNAL;
+        barrier.image = copy.dstImage;
+        barrier.subresourceRange.aspectMask = copy.copyRegion.imageSubresource.aspectMask;
+        barrier.subresourceRange.baseMipLevel = copy.copyRegion.imageSubresource.mipLevel;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = copy.copyRegion.imageSubresource.baseArrayLayer;
+        barrier.subresourceRange.layerCount = copy.copyRegion.imageSubresource.layerCount;
+        postCopyImageBarriers.push_back(barrier);
+    }
+
+    // Apply post-copy barriers
+    vkCmdPipelineBarrier(
+            commandBuffer,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+            0,
+            0, nullptr,
+            static_cast<uint32_t>(postCopyBufferBarriers.size()), postCopyBufferBarriers.data(),
+            static_cast<uint32_t>(postCopyImageBarriers.size()), postCopyImageBarriers.data()
+    );
 
     vkEndCommandBuffer(commandBuffer);
 
@@ -187,8 +248,6 @@ void StagingBufferManager::submitAndWait(const std::vector<BufferCopyInfo> &copi
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffer;
-    //submitInfo.signalSemaphoreCount = operationQueue.size() <= 1;
-    //submitInfo.pSignalSemaphores = &transferCompleteSemaphore;
 
     vkResetFences(device, 1, &transferFence);
 

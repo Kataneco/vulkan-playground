@@ -1,13 +1,18 @@
 #version 460
 
-layout(location = 0) in vec4 inColor;
-layout(location = 1) in vec2 texCoords;
-layout(location = 2) in vec3 inNormal;
+layout(set = 0, binding = 0) uniform sampler2D texSampler;
 
-layout(location = 3) in vec3 inPosition;
+layout(location = 0) in vec2 texCoord;
+layout(location = 1) in vec4 gPosition;
+layout(location = 2) in vec4 gNormalSpec;
 
 layout(location = 0) out vec4 outColor;
+layout(location = 1) out vec4 outPosition;
+layout(location = 2) out vec4 outNormalSpec;
 
 void main() {
-    outColor = vec4(0.5+0.5*inNormal, 1.0);
+    outColor = texture(texSampler, texCoord);
+    if (outColor.a < 0.99f) discard;
+    outPosition = vec4(gPosition.xyz, gl_FragCoord.z);
+    outNormalSpec = gNormalSpec;
 }

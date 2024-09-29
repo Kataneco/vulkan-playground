@@ -17,9 +17,15 @@ public:
 
     void createImageView(const VkImageViewCreateInfo &viewInfo);
 
+    VkFormat getFormat() const { return format; }
+    VkExtent3D getExtent() const { return extent; }
+
 private:
     VmaAllocator allocator;
     VkImage image;
     VmaAllocation allocation;
     VkImageView imageView;
+
+    VkFormat format;
+    VkExtent3D extent;
 };

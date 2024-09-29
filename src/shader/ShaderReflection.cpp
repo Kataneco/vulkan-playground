@@ -32,6 +32,7 @@ ShaderReflection::ShaderReflection(const std::string &spirvCode) {
         //death
     }
     reflect();
+    //spvReflectDestroyShaderModule(&module);
 }
 
 ShaderReflection::~ShaderReflection() {
@@ -110,4 +111,76 @@ void ShaderReflection::reflectPushConstantRanges() {
         range.size = block->size;
         pushConstantRanges.push_back(range);
     }
+}
+
+void ShaderCombo::mergeDescriptorSetLayouts(const std::vector<DescriptorSetLayoutData>& other) {
+    std::unordered_map<uint32_t, DescriptorSetLayoutData> setMap;
+
+    for (const auto& layout : descriptorSetLayouts) {
+        setMap[layout.set] = std::move(layout);
+    }
+
+    for (const auto& newLayout : other) {
+        auto& existingLayout = setMap[newLayout.set];
+        for (const auto& newBinding : newLayout.bindings) {
+            auto it = std::find_if(existingLayout.bindings.begin(), existingLayout.bindings.end(),
+                                   [&](const auto& b) { return b.binding == newBinding.binding; });
+
+            if (it == existingLayout.bindings.end()) {
+                existingLayout.bindings.push_back(newBinding);
+            } else {
+                it->stageFlags |= newBinding.stageFlags;
+            }
+        }
+    }
+
+    descriptorSetLayouts.clear();
+    for (auto& [_, layout] : setMap) {
+        descriptorSetLayouts.push_back(std::move(layout));
+    }
+}
+
+void ShaderCombo::mergePushConstantRanges(const std::vector<VkPushConstantRange>& other) {
+    std::unordered_map<uint64_t, VkPushConstantRange> rangeMap;
+
+    auto addToMap = [&rangeMap](const VkPushConstantRange &range) {
+        uint64_t key = (static_cast<uint64_t>(range.offset) << 32) | range.size;
+        auto &existing = rangeMap[key];
+        if (existing.size == 0) {
+            existing = range;
+        } else {
+            existing.stageFlags |= range.stageFlags;
+        }
+    };
+
+    for (const auto &range: pushConstantRanges) {
+        addToMap(range);
+    }
+    for (const auto &range: other) {
+        addToMap(range);
+    }
+
+    pushConstantRanges.clear();
+    for (const auto &[_, range]: rangeMap) {
+        pushConstantRanges.push_back(range);
+    }
+}
+
+ShaderCombo& ShaderCombo::operator+=(const ShaderReflection& o) {
+    mergeDescriptorSetLayouts(o.getDescriptorSetLayouts());
+    mergePushConstantRanges(o.getPushConstantRanges());
+    return *this;
+}
+
+ShaderCombo& ShaderCombo::operator+=(const ShaderCombo& o) {
+    mergeDescriptorSetLayouts(o.descriptorSetLayouts);
+    mergePushConstantRanges(o.pushConstantRanges);
+    return *this;
+}
+
+ShaderCombo operator+(const ShaderReflection &a, const ShaderReflection &b) {
+    ShaderCombo result;
+    result += a;
+    result += b;
+    return result;
 }
