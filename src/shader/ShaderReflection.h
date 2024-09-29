@@ -56,3 +56,17 @@ private:
     void reflectOutputVariables();
     void reflectPushConstantRanges();
 };
+
+struct ShaderCombo {
+    std::vector<DescriptorSetLayoutData> descriptorSetLayouts;
+    std::vector<VkPushConstantRange> pushConstantRanges;
+
+    ShaderCombo &operator+=(const ShaderReflection &o);
+    ShaderCombo &operator+=(const ShaderCombo &o);
+
+private:
+    void mergeDescriptorSetLayouts(const std::vector<DescriptorSetLayoutData> &other);
+    void mergePushConstantRanges(const std::vector<VkPushConstantRange> &other);
+};
+
+ShaderCombo operator+(const ShaderReflection &a, const ShaderReflection &b);

@@ -2,6 +2,8 @@
 
 Image::Image(VkDevice device, VmaAllocator allocator, const VkImageCreateInfo &imageInfo, const VmaAllocationCreateInfo &allocInfo, const std::string &name) : Resource(device, name), allocator(allocator) {
     vmaCreateImage(allocator, &imageInfo, &allocInfo, &image, &allocation, nullptr);
+    format = imageInfo.format;
+    extent = imageInfo.extent;
 }
 
 Image::~Image() {

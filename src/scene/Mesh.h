@@ -8,17 +8,20 @@
 struct Vertex {
     glm::vec3 position;
     glm::vec3 normal;
-    glm::vec2 texCoords;
+    glm::vec2 texCoord;
 
     bool operator==(const Vertex &other) const {
-        return position == other.position && normal == other.normal && texCoords == other.texCoords;
+        return position == other.position && normal == other.normal && texCoord == other.texCoord;
     }
+
+    static std::vector<VkVertexInputBindingDescription> bindings();
+    static std::vector<VkVertexInputAttributeDescription> attributes();
 };
 
 namespace std {
     template<> struct hash<Vertex> {
         size_t operator()(Vertex const &vertex) const {
-            return ((hash<glm::vec3>()(vertex.position) ^ (hash<glm::vec3>()(vertex.normal) << 1)) >> 1) ^ (hash<glm::vec2>()(vertex.texCoords) << 1);
+            return std::hash<glm::vec3>()(vertex.position) ^ (std::hash<glm::vec3>()(vertex.normal) << 1) ^ (std::hash<glm::vec2>()(vertex.texCoord) << 2);
         }
     };
 }

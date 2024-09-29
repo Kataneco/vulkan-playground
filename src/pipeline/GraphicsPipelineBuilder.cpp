@@ -89,6 +89,16 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::setColorBlendState(const VkPip
     return *this;
 }
 
+GraphicsPipelineBuilder &GraphicsPipelineBuilder::setColorBlendState(const std::vector<VkPipelineColorBlendAttachmentState> &attachments) {
+    colorBlendAttachments = attachments;
+
+    colorBlendState.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlendState.logicOpEnable = VK_FALSE;
+    colorBlendState.attachmentCount = colorBlendAttachments.size();
+    colorBlendState.pAttachments = colorBlendAttachments.data();
+    return *this;
+}
+
 GraphicsPipelineBuilder& GraphicsPipelineBuilder::setDynamicState(const std::vector<VkDynamicState>& states) {
     dynamicStates = states;
 
