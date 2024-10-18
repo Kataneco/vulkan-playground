@@ -1,9 +1,6 @@
 #pragma once
 #include "util/VulkanUtils.h"
 
-#include "core/Device.h"
-#include "RenderPass.h"
-
 class Framebuffer {
 public:
     Framebuffer(VkDevice device, VkRenderPass renderPass);

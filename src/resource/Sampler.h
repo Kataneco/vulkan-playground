@@ -2,7 +2,6 @@
 #include "util/VulkanUtils.h"
 
 #include "Resource.h"
-#include "MemoryAllocator.h"
 
 class Sampler : public Resource {
 public:

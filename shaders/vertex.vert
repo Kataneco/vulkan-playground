@@ -21,7 +21,7 @@ layout(set = 0, binding = 1) uniform UniformBufferObject {
 void main() {
     const float time = float(constants.time);
     fragTexCoord = texCoord;
-    gPosition = ubo.model * vec4(position.xyz, 1.0f);
-    gNormalSpec = vec4(normal.xyz, 0.0f);
+    gPosition = ubo.view * ubo.model * vec4(position.xyz, 1.0f);
+    gNormalSpec = vec4(normal.xyz, 0.42f);
     gl_Position = ubo.proj * ubo.view * ubo.model * vec4(position.xyz, 1.0f);
 }

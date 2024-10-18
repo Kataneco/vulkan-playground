@@ -5,10 +5,10 @@ VKAPI_ATTR VkBool32 VKAPI_CALL volcanoDebugCallback(VkDebugUtilsMessageSeverityF
     return VK_FALSE;
 }
 
-VulkanInstance::VulkanInstance(uint32_t apiVersion, std::vector<const char *> instanceExtensions) : apiVersion(apiVersion) {
+VulkanInstance::VulkanInstance(uint32_t apiVersion, std::vector<const char *> instanceExtensions, bool debug) : apiVersion(apiVersion) {
     volkInitialize();
 
-    instanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    if (debug) instanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     instanceExtensions.push_back(VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME);
     instanceExtensions.push_back(VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME);
     std::vector<const char *> enabledLayers = {"VK_LAYER_KHRONOS_validation"};
@@ -24,7 +24,7 @@ VulkanInstance::VulkanInstance(uint32_t apiVersion, std::vector<const char *> in
     VkInstanceCreateInfo instanceCreateInfo{};
     instanceCreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     instanceCreateInfo.pApplicationInfo = &applicationInfo;
-    instanceCreateInfo.enabledLayerCount = enabledLayers.size();
+    instanceCreateInfo.enabledLayerCount = debug ? enabledLayers.size() : 0;
     instanceCreateInfo.ppEnabledLayerNames = enabledLayers.data();
     instanceCreateInfo.enabledExtensionCount = instanceExtensions.size();
     instanceCreateInfo.ppEnabledExtensionNames = instanceExtensions.data();
@@ -39,10 +39,12 @@ VulkanInstance::VulkanInstance(uint32_t apiVersion, std::vector<const char *> in
     messengerCreateInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
     messengerCreateInfo.pfnUserCallback = volcanoDebugCallback;
 
-    vkCreateDebugUtilsMessengerEXT(instance, &messengerCreateInfo, nullptr, &debugMessenger);
+    if (debug) vkCreateDebugUtilsMessengerEXT(instance, &messengerCreateInfo, nullptr, &debugMessenger);
 }
 
 VulkanInstance::~VulkanInstance() {
-    vkDestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
+    if (debugMessenger != VK_NULL_HANDLE) {
+        vkDestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
+    }
     vkDestroyInstance(instance, nullptr);
 }

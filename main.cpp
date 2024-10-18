@@ -1,5 +1,6 @@
 #define KITTY_MAIN
 #include "Engine.h"
+#include <random>
 
 int main(int argc, char* argv[]) {
     std::cout << "Haii wurld!! :3" << std::endl;
@@ -16,15 +17,15 @@ int main(int argc, char* argv[]) {
     uint32_t glfwExtensionCount = 0;
     const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
     std::vector<const char*> instanceExtensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
-    VulkanInstance instance(VK_API_VERSION_1_3, instanceExtensions);
+    VulkanInstance instance(VK_API_VERSION_1_3, instanceExtensions, true);
 
-    Device device(instance, {.samplerAnisotropy = VK_TRUE, .vertexPipelineStoresAndAtomics = VK_TRUE, .fragmentStoresAndAtomics = VK_TRUE, .fillModeNonSolid = VK_TRUE}, {});
+    Device device(instance, {.independentBlend = VK_TRUE, .fillModeNonSolid = VK_TRUE, .samplerAnisotropy = VK_TRUE}, {});
 
     DescriptorLayoutCache descriptorLayoutCache(device);
     DescriptorAllocator descriptorAllocator(device);
     MemoryAllocator memoryAllocator(instance, device);
     ResourceManager resourceManager(device, memoryAllocator);
-    StagingBufferManager stagingBufferManager(device/*, 128*1024*1024*/);
+    StagingBufferManager stagingBufferManager(device, 128*1024*1024);
     CommandPool commandPool(device, device.getGraphicsFamily(), VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
     PipelineLayoutCache pipelineLayoutCache(device, descriptorLayoutCache);
 
@@ -46,7 +47,7 @@ int main(int argc, char* argv[]) {
             .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
     };
 
-    auto depthImage = resourceManager.createImage(depthImageCreateInfo, {.usage = VMA_MEMORY_USAGE_GPU_ONLY, .flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT});
+    auto depthImage = resourceManager.createImage(depthImageCreateInfo, {.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, .usage = VMA_MEMORY_USAGE_GPU_ONLY});
 
     VkImageViewCreateInfo depthImageViewCreateInfo{
             .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -61,14 +62,14 @@ int main(int argc, char* argv[]) {
     auto gColor = resourceManager.createImage({
                                                       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
                                                       .imageType = VK_IMAGE_TYPE_2D,
-                                                      .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+                                                      .format = VK_FORMAT_R8G8B8A8_UNORM,
                                                       .extent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1},
                                                       .mipLevels = 1,
                                                       .arrayLayers = 1,
                                                       .samples = VK_SAMPLE_COUNT_1_BIT,
                                                       .tiling = VK_IMAGE_TILING_OPTIMAL,
-                                                      .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT
-                                              }, {.usage = VMA_MEMORY_USAGE_GPU_ONLY, .flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT});
+                                                      .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT
+                                              }, {.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, .usage = VMA_MEMORY_USAGE_GPU_ONLY});
 
     auto gPosition = resourceManager.createImage({
                                                          .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -79,8 +80,8 @@ int main(int argc, char* argv[]) {
                                                          .arrayLayers = 1,
                                                          .samples = VK_SAMPLE_COUNT_1_BIT,
                                                          .tiling = VK_IMAGE_TILING_OPTIMAL,
-                                                         .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT
-                                                 }, {.usage = VMA_MEMORY_USAGE_GPU_ONLY, .flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT});
+                                                         .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT
+                                                 }, {.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, .usage = VMA_MEMORY_USAGE_GPU_ONLY});
 
     auto gNormalSpec = resourceManager.createImage({
                                                          .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -91,14 +92,14 @@ int main(int argc, char* argv[]) {
                                                          .arrayLayers = 1,
                                                          .samples = VK_SAMPLE_COUNT_1_BIT,
                                                          .tiling = VK_IMAGE_TILING_OPTIMAL,
-                                                         .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT
-                                                 }, {.usage = VMA_MEMORY_USAGE_GPU_ONLY, .flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT});
+                                                         .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT
+                                                   }, {.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, .usage = VMA_MEMORY_USAGE_GPU_ONLY});
 
     gColor->createImageView({
                                     .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
                                     .image = gColor->getImage(),
                                     .viewType = VK_IMAGE_VIEW_TYPE_2D,
-                                    .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+                                    .format = VK_FORMAT_R8G8B8A8_UNORM,
                                     .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}
                             });
 
@@ -117,11 +118,6 @@ int main(int argc, char* argv[]) {
                                        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
                                        .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}
                                });
-
-    auto gSampler = resourceManager.createSampler({.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO});
-    auto gSampler1 = resourceManager.createSampler({.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO});
-    auto gSampler2 = resourceManager.createSampler({.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO});
-
 
     RenderPass renderPass(device);
     VkAttachmentDescription colorAttachment{};
@@ -145,10 +141,10 @@ int main(int argc, char* argv[]) {
     depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
     VkAttachmentDescription gColorAttachment{};
-    gColorAttachment.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+    gColorAttachment.format = VK_FORMAT_R8G8B8A8_UNORM;
     gColorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
     gColorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    gColorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    gColorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     gColorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     gColorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     gColorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -158,7 +154,7 @@ int main(int argc, char* argv[]) {
     gPositionAttachment.format = VK_FORMAT_R32G32B32A32_SFLOAT;
     gPositionAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
     gPositionAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    gPositionAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    gPositionAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     gPositionAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     gPositionAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     gPositionAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -168,7 +164,7 @@ int main(int argc, char* argv[]) {
     gNormalSpecAttachment.format = VK_FORMAT_R32G32B32A32_SFLOAT;
     gNormalSpecAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
     gNormalSpecAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    gNormalSpecAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    gNormalSpecAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     gNormalSpecAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     gNormalSpecAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     gNormalSpecAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -184,9 +180,9 @@ int main(int argc, char* argv[]) {
     };
 
     std::vector<VkAttachmentReference> inputAttachmentReferences = {
-            {2, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-            {3, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-            {4, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}
+            {2, VK_IMAGE_LAYOUT_GENERAL},
+            {3, VK_IMAGE_LAYOUT_GENERAL},
+            {4, VK_IMAGE_LAYOUT_GENERAL}
     };
 
     VkSubpassDescription gSubpass{};
@@ -267,8 +263,8 @@ int main(int argc, char* argv[]) {
             .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
             .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
             .colorBlendOp = VK_BLEND_OP_ADD,
-            .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
-            .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+            .srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+            .dstAlphaBlendFactor = VK_BLEND_FACTOR_DST_ALPHA,
             .alphaBlendOp = VK_BLEND_OP_ADD,
             .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
     };
@@ -322,11 +318,6 @@ int main(int argc, char* argv[]) {
     Texture voxeliaTexture = Texture::loadImage("/home/honeywrap/Documents/kitten/assets/vokselia_spawn/vokselia_spawn.png");
     voxeliaTexture.pushTexture(resourceManager, stagingBufferManager);
 
-    cont.begin();
-    ResourceBarrier::transitionImageLayout(cont, voxeliaTexture.image->getImage(), voxeliaTexture.image->getFormat(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    cont.end();
-    cont.submit(device.getGraphicsQueue());
-
     auto ubo = resourceManager.createBuffer({.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = sizeof(glm::mat4x4)*128, .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT}, {.usage = VMA_MEMORY_USAGE_AUTO});
 
     VkDescriptorSet voxeliaSet;
@@ -338,20 +329,84 @@ int main(int argc, char* argv[]) {
     .build(voxeliaSet);
 
     MeshRenderer voxeliaRenderer(voxelia, {
-            {pipeline,            pipelineLayout, voxeliaSet},
-            {transparentPipeline, pipelineLayout, voxeliaSet}
+            {pipeline,            pipelineLayout, voxeliaSet, 0},
+            {transparentPipeline, pipelineLayout, voxeliaSet, 1}
     });
+
+    std::uniform_real_distribution<float> randomFloats(0.0, 1.0);
+    std::default_random_engine generator;
+    std::vector<glm::vec3> ssaoKernel;
+    for (unsigned int i = 0; i < 64; ++i) {
+        glm::vec3 sample(
+                randomFloats(generator) * 2.0 - 1.0,
+                randomFloats(generator) * 2.0 - 1.0,
+                randomFloats(generator)
+        );
+        float scale = (float)i / 64.0;
+        scale   = lerp(0.1f, 1.0f, scale * scale);
+        sample *= scale;
+        ssaoKernel.push_back(sample);
+    }
+
+    std::vector<glm::vec3> ssaoNoise;
+    for (unsigned int i = 0; i < 16; i++) {
+        glm::vec3 noise(
+                randomFloats(generator) * 2.0 - 1.0,
+                randomFloats(generator) * 2.0 - 1.0,
+                0.0f);
+        ssaoNoise.push_back(noise);
+    }
+
+    auto noiseImage = resourceManager.createImage({
+                                                         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+                                                         .imageType = VK_IMAGE_TYPE_2D,
+                                                         .format = VK_FORMAT_R32G32B32_SFLOAT,
+                                                         .extent = {4, 4, 1},
+                                                         .mipLevels = 1,
+                                                         .arrayLayers = 1,
+                                                         .samples = VK_SAMPLE_COUNT_1_BIT,
+                                                         .tiling = VK_IMAGE_TILING_LINEAR,
+                                                         .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
+                                                 }, {.usage = VMA_MEMORY_USAGE_AUTO});
+
+    noiseImage->createImageView({
+                                         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                                         .image = noiseImage->getImage(),
+                                         .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                                         .format = VK_FORMAT_R32G32B32_SFLOAT,
+                                         .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}
+                                 });
+
+    auto noiseSampler = resourceManager.createSampler({.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO, .magFilter=VK_FILTER_LINEAR, .minFilter=VK_FILTER_LINEAR});
+
+    stagingBufferManager.stageImageData(ssaoNoise.data(), noiseImage->getImage(), ssaoNoise.size()*sizeof(ssaoNoise[0]), {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, {}, {4, 4, 1});
+
+    auto ssaoSamples = resourceManager.createBuffer({.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = ssaoKernel.size()*sizeof(ssaoKernel[0]), .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT}, {.usage = VMA_MEMORY_USAGE_AUTO});
+
+    stagingBufferManager.stageBufferData(ssaoKernel.data(), ssaoSamples->getBuffer(), ssaoKernel.size()*sizeof(ssaoKernel[0]));
+
+    stagingBufferManager.flush();
+
+    cont.begin();
+    ResourceBarrier::transitionImageLayout(cont, voxeliaTexture.image->getImage(), voxeliaTexture.image->getFormat(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    ResourceBarrier::transitionImageLayout(cont, noiseImage->getImage(), noiseImage->getFormat(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    cont.end();
+    cont.submit(device.getGraphicsQueue());
 
     VkDescriptorSet gBufferSet;
     VkDescriptorImageInfo gDescriptorInfos[] = {
-            {gSampler->getSampler(), gColor->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-            {gSampler1->getSampler(), gPosition->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-            {gSampler2->getSampler(), gNormalSpec->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}
+            {VK_NULL_HANDLE, gColor->getImageView(), VK_IMAGE_LAYOUT_GENERAL},
+            {VK_NULL_HANDLE, gPosition->getImageView(), VK_IMAGE_LAYOUT_GENERAL},
+            {VK_NULL_HANDLE, gNormalSpec->getImageView(), VK_IMAGE_LAYOUT_GENERAL},
+            {noiseSampler->getSampler(), noiseImage->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}
     };
+    VkDescriptorBufferInfo ssaoKernelDescriptorInfo = {ssaoSamples->getBuffer(), 0, VK_WHOLE_SIZE};
     DescriptorBuilder(descriptorLayoutCache, descriptorAllocator)
-    .bind_image(0, &gDescriptorInfos[0], VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
-    .bind_image(1, &gDescriptorInfos[1], VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
-    .bind_image(2, &gDescriptorInfos[2], VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
+    .bind_image(0, &gDescriptorInfos[0], VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_FRAGMENT_BIT)
+    .bind_image(1, &gDescriptorInfos[1], VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_FRAGMENT_BIT)
+    .bind_image(2, &gDescriptorInfos[2], VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_FRAGMENT_BIT)
+    .bind_image(3, &gDescriptorInfos[3], VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
+    .bind_buffer(4, &ssaoKernelDescriptorInfo, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT)
     .build(gBufferSet);
 
     //Main rendering loop
@@ -365,7 +420,7 @@ int main(int argc, char* argv[]) {
     //Camera
     float sensitivity = 0.1f;
     float lastX = 0.0f, lastY = 0.0f;
-    float speed = 1.0f;
+    float speed = 2.0f;
     float yaw = 0.0f, pitch = 0.0f;
     glm::vec3 camera = {0.0f, 0.0f, -1.0f};
     while (!glfwWindowShouldClose(window)) {
@@ -386,7 +441,7 @@ int main(int argc, char* argv[]) {
         uint32_t swapchainIndex = swapchain.acquireNextImage(swapchainLockSemaphore[frame], VK_NULL_HANDLE);
 
         commandBuffer.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-        renderPass.begin(commandBuffer, framebuffers[frame], scissor, {{.color = {0.9f, 0.9f, 0.9f, 0.0f}}, {.depthStencil = {1.0f, 0}}, {.color = {0.9f, 0.9f, 0.9f, 0.0f}}, {}, {}});
+        renderPass.begin(commandBuffer, framebuffers[frame], scissor, {{.color = {0.0f, 0.0f, 0.0f, 0.0f}}, {.depthStencil = {1.0f, 0}}, {.color = {0.75f, 0.76f, 0.77f, 0.0f}}, {}, {}});
 
         //camera bs
         float time = std::chrono::duration_cast<std::chrono::duration<float, std::ratio<1,1>>>(std::chrono::high_resolution_clock::now()-start).count();
@@ -428,19 +483,15 @@ int main(int argc, char* argv[]) {
 
         vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(time), &time);
 
-        //voxeliaRenderer.render(commandBuffer);
+        VkPipeline boundPipeline = VK_NULL_HANDLE;
 
-        commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-        commandBuffer.bindVertexBuffers(0, {voxelia.vertexBuffer->getBuffer()}, {0});
-        commandBuffer.bindIndexBuffer(voxelia.indexBuffer->getBuffer(), 0, VK_INDEX_TYPE_UINT32);
-        commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, {voxeliaSet});
-        commandBuffer.drawIndexed(voxelia.indices.size());
-        commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, transparentPipeline);
-        commandBuffer.drawIndexed(voxelia.indices.size());
+        voxeliaRenderer.render(commandBuffer, boundPipeline, 0);
+
+        voxeliaRenderer.render(commandBuffer, boundPipeline, 1);
 
         vkCmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
 
-        glm::vec2 screenSize(width, height);
+        glm::ivec2 screenSize(width, height);
 
         vkCmdPushConstants(commandBuffer, deferredLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(projection), &projection);
         vkCmdPushConstants(commandBuffer, deferredLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(projection), sizeof(screenSize), &screenSize);
@@ -465,8 +516,10 @@ int main(int argc, char* argv[]) {
 
     device.waitIdle();
 
+    vkDestroyPipeline(device, deferredPipeline, nullptr);
     vkDestroyPipeline(device, transparentPipeline, nullptr);
     vkDestroyPipeline(device, pipeline, nullptr);
+    swapchain.destroy();
     vkDestroySurfaceKHR(instance, surface, nullptr);
     glfwTerminate();
     return 0;
