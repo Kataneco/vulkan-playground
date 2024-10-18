@@ -1,8 +1,6 @@
 #pragma once
 #include "util/VulkanUtils.h"
 
-#include "shader/ShaderReflection.h"
-
 class DescriptorAllocator {
 public:
     explicit DescriptorAllocator(VkDevice device);

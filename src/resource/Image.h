@@ -15,7 +15,7 @@ public:
     VmaAllocation getAllocation() const { return allocation; }
     VkImageView getImageView() const { return imageView; }
 
-    void createImageView(const VkImageViewCreateInfo &viewInfo);
+    void createImageView(VkImageViewCreateInfo viewInfo);
 
     VkFormat getFormat() const { return format; }
     VkExtent3D getExtent() const { return extent; }

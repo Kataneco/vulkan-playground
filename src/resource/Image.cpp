@@ -22,6 +22,8 @@ void Image::destroy() {
     }
 }
 
-void Image::createImageView(const VkImageViewCreateInfo& viewInfo) {
+void Image::createImageView(VkImageViewCreateInfo viewInfo) {
+    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.image = image;
     vkCreateImageView(device, &viewInfo, nullptr, &imageView);
 }

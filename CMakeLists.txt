@@ -56,8 +56,6 @@ add_executable(kitten main.cpp
         src/sync/Fence.h
         src/util/VulkanUtils.cpp
         src/util/VulkanUtils.h
-        src/util/ErrorHandling.cpp
-        src/util/ErrorHandling.h
         src/resource/Resource.cpp
         src/resource/Resource.h
         src/resource/ResourceManager.cpp
@@ -66,8 +64,6 @@ add_executable(kitten main.cpp
         src/resource/MemoryAllocator.h
         src/resource/StagingBufferManager.cpp
         src/resource/StagingBufferManager.h
-        src/resource/ResourceTracker.cpp
-        src/resource/ResourceTracker.h
         src/resource/ResourceBarrier.cpp
         src/resource/ResourceBarrier.h
         lib/spirv_reflect.c
@@ -90,7 +86,7 @@ target_link_libraries(kitten glfw)
 find_program(GLSLC_EXECUTABLE glslc)
 
 set(SHADER_DIR "${CMAKE_SOURCE_DIR}/shaders")
-set(COMPILED_SHADER_DIR "${CMAKE_SOURCE_DIR}/shaders")
+set(COMPILED_SHADER_DIR "${CMAKE_BINARY_DIR}/shaders")
 
 file(GLOB SHADER_FILES "${SHADER_DIR}/*.vert" "${SHADER_DIR}/*.frag" "${SHADER_DIR}/*.comp")
 
