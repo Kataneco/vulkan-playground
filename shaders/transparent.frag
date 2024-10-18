@@ -12,7 +12,7 @@ layout(location = 2) out vec4 outNormalSpec;
 
 void main() {
     outColor = texture(texSampler, texCoord);
-    if (outColor.a < 0.99f) discard;
+    if (outColor.a > 0.99f) discard;
     outPosition = vec4(gPosition.xyzw);
     outNormalSpec = gNormalSpec;
 }

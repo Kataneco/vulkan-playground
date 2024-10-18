@@ -1,8 +1,6 @@
 #pragma once
 #include "util/VulkanUtils.h"
 
-#include "core/Device.h"
-
 class RenderPass {
 public:
     explicit RenderPass(VkDevice device);

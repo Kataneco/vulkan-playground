@@ -1,7 +1,6 @@
 #pragma once
 #include "util/VulkanUtils.h"
 
-#include "core/Device.h"
 #include "CommandBuffer.h"
 
 class CommandPool {

@@ -9,7 +9,8 @@ public:
     MeshRenderer(const Mesh &mesh, const std::vector<Material> &materials);
     ~MeshRenderer();
 
-    void render(VkCommandBuffer commandBuffer);
+    void render(VkCommandBuffer commandBuffer, uint32_t layer = 0);
+    void render(VkCommandBuffer commandBuffer, VkPipeline& boundPipeline, uint32_t layer = 0);
 
 private:
     bool enabled;

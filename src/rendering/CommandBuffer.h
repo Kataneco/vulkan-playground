@@ -1,8 +1,6 @@
 #pragma once
 #include "util/VulkanUtils.h"
 
-#include "core/Device.h"
-
 class CommandBuffer {
 public:
     CommandBuffer(VkDevice device, VkCommandPool commandPool, VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY);

@@ -12,20 +12,34 @@ std::vector<VkVertexInputAttributeDescription> Vertex::attributes() {
     };
 }
 
-//TODO: This is a testing function, replace later
 Mesh Mesh::loadObj(const std::string& filePath) {
     Mesh mesh{};
-    tinyobj::attrib_t attrib;
-    std::vector<tinyobj::shape_t> shapes;
-    std::vector<tinyobj::material_t> materials;
-    std::string warn, err;
+    tinyobj::ObjReaderConfig reader_config;
+    reader_config.triangulate = true;
+    reader_config.triangulation_method = "earcut";
 
-    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, filePath.c_str()))
-        throw std::runtime_error(warn + err);
+    tinyobj::ObjReader reader;
+
+    if (!reader.ParseFromFile(filePath, reader_config)) {
+        if (!reader.Error().empty()) {
+            throw std::runtime_error(reader.Error());
+        }
+    }
+
+    if (!reader.Warning().empty()) {
+        std::cout << "TinyObjReader: " << reader.Warning() << std::endl;
+    }
+
+    auto &attrib = reader.GetAttrib();
+    auto &shapes = reader.GetShapes();
+    auto &materials = reader.GetMaterials();
 
     std::unordered_map<Vertex, uint32_t> uniqueVertices{};
 
+    mesh.vertices.reserve(attrib.vertices.size() / 3);
+    uniqueVertices.reserve(attrib.vertices.size() / 3);
     for (const auto &shape: shapes) {
+        mesh.indices.reserve(mesh.indices.size() + shape.mesh.indices.size());
         for (const auto &index: shape.mesh.indices) {
             Vertex vertex{};
 
@@ -58,6 +72,10 @@ Mesh Mesh::loadObj(const std::string& filePath) {
             mesh.indices.push_back(uniqueVertices[vertex]);
         }
     }
+
+    mesh.vertices.shrink_to_fit();
+    mesh.indices.shrink_to_fit();
+
     return mesh;
 }
 

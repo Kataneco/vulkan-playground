@@ -6,8 +6,10 @@ set(CMAKE_CXX_STANDARD 26)
 find_package(glm)
 find_package(glfw3)
 
-include_directories(lib)
+include_directories(SYSTEM lib)
 include_directories(src)
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -flto -march=native")
 
 add_executable(kitten main.cpp
         src/core/VulkanInstance.cpp
@@ -79,6 +81,33 @@ add_executable(kitten main.cpp
         src/util/Window.cpp
         src/util/Window.h
         src/resource/Texture.cpp
-        src/resource/Texture.h)
+        src/resource/Texture.h
+)
 
 target_link_libraries(kitten glfw)
+
+#Shader compilation
+find_program(GLSLC_EXECUTABLE glslc)
+
+set(SHADER_DIR "${CMAKE_SOURCE_DIR}/shaders")
+set(COMPILED_SHADER_DIR "${CMAKE_SOURCE_DIR}/shaders")
+
+file(GLOB SHADER_FILES "${SHADER_DIR}/*.vert" "${SHADER_DIR}/*.frag" "${SHADER_DIR}/*.comp")
+
+foreach(SHADER_FILE ${SHADER_FILES})
+    get_filename_component(SHADER_NAME ${SHADER_FILE} NAME_WE)
+    set(COMPILED_SHADER_FILE "${COMPILED_SHADER_DIR}/${SHADER_NAME}.spv")
+
+    add_custom_command(
+            OUTPUT ${COMPILED_SHADER_FILE}
+            COMMAND ${GLSLC_EXECUTABLE} ${SHADER_FILE} -o ${COMPILED_SHADER_FILE}
+            DEPENDS ${SHADER_FILE}
+            COMMENT "Compiling shader ${SHADER_NAME}"
+            VERBATIM
+    )
+
+    list(APPEND COMPILED_SHADERS ${COMPILED_SHADER_FILE})
+endforeach()
+
+add_custom_target(compile_shaders ALL DEPENDS ${COMPILED_SHADERS})
+add_dependencies(kitten compile_shaders)

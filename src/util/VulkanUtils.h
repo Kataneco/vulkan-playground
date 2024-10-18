@@ -4,6 +4,7 @@
 #define VOLK_IMPLEMENTATION
 #define VMA_IMPLEMENTATION
 #define TINYOBJLOADER_IMPLEMENTATION
+#define TINYOBJ_LOADER_OPT_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
 #endif
 
@@ -39,6 +40,7 @@
 #include <glm/gtx/string_cast.hpp>
 #include <glm/gtx/hash.hpp>
 
+#define TINYOBJLOADER_USE_MAPBOX_EARCUT
 #include "tiny_obj_loader.h"
 #include "stb_image.h"
 
