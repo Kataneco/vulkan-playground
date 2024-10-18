@@ -6,6 +6,9 @@ public:
     VulkanInstance(uint32_t apiVersion, std::vector<const char *> instanceExtensions, bool debug = false);
     ~VulkanInstance();
 
+    VulkanInstance(const VulkanInstance &) = delete;
+    VulkanInstance &operator=(const VulkanInstance &) = delete;
+
     operator VkInstance() const { return instance; }
 
 private:

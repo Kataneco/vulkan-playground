@@ -25,7 +25,7 @@ int main(int argc, char* argv[]) {
     DescriptorAllocator descriptorAllocator(device);
     MemoryAllocator memoryAllocator(instance, device);
     ResourceManager resourceManager(device, memoryAllocator);
-    StagingBufferManager stagingBufferManager(device, 128*1024*1024);
+    StagingBufferManager stagingBufferManager(device, 64*1024*1024);
     CommandPool commandPool(device, device.getGraphicsFamily(), VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
     PipelineLayoutCache pipelineLayoutCache(device, descriptorLayoutCache);
 
@@ -36,7 +36,6 @@ int main(int argc, char* argv[]) {
     swapchain.create(width, height);
 
     VkImageCreateInfo depthImageCreateInfo{
-            .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
             .imageType = VK_IMAGE_TYPE_2D,
             .format = VK_FORMAT_D32_SFLOAT,
             .extent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1},
@@ -50,8 +49,6 @@ int main(int argc, char* argv[]) {
     auto depthImage = resourceManager.createImage(depthImageCreateInfo, {.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, .usage = VMA_MEMORY_USAGE_GPU_ONLY});
 
     VkImageViewCreateInfo depthImageViewCreateInfo{
-            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-            .image = depthImage->getImage(),
             .viewType = VK_IMAGE_VIEW_TYPE_2D,
             .format = VK_FORMAT_D32_SFLOAT,
             .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0,1,0,1}
@@ -60,7 +57,6 @@ int main(int argc, char* argv[]) {
     depthImage->createImageView(depthImageViewCreateInfo);
 
     auto gColor = resourceManager.createImage({
-                                                      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
                                                       .imageType = VK_IMAGE_TYPE_2D,
                                                       .format = VK_FORMAT_R8G8B8A8_UNORM,
                                                       .extent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1},
@@ -72,7 +68,6 @@ int main(int argc, char* argv[]) {
                                               }, {.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, .usage = VMA_MEMORY_USAGE_GPU_ONLY});
 
     auto gPosition = resourceManager.createImage({
-                                                         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
                                                          .imageType = VK_IMAGE_TYPE_2D,
                                                          .format = VK_FORMAT_R32G32B32A32_SFLOAT,
                                                          .extent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1},
@@ -84,7 +79,6 @@ int main(int argc, char* argv[]) {
                                                  }, {.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, .usage = VMA_MEMORY_USAGE_GPU_ONLY});
 
     auto gNormalSpec = resourceManager.createImage({
-                                                         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
                                                          .imageType = VK_IMAGE_TYPE_2D,
                                                          .format = VK_FORMAT_R32G32B32A32_SFLOAT,
                                                          .extent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1},
@@ -96,24 +90,18 @@ int main(int argc, char* argv[]) {
                                                    }, {.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, .usage = VMA_MEMORY_USAGE_GPU_ONLY});
 
     gColor->createImageView({
-                                    .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                                    .image = gColor->getImage(),
                                     .viewType = VK_IMAGE_VIEW_TYPE_2D,
                                     .format = VK_FORMAT_R8G8B8A8_UNORM,
                                     .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}
                             });
 
     gPosition->createImageView({
-                                       .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                                       .image = gPosition->getImage(),
                                        .viewType = VK_IMAGE_VIEW_TYPE_2D,
                                        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
                                        .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}
                                });
 
     gNormalSpec->createImageView({
-                                       .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                                       .image = gNormalSpec->getImage(),
                                        .viewType = VK_IMAGE_VIEW_TYPE_2D,
                                        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
                                        .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}
@@ -125,9 +113,6 @@ int main(int argc, char* argv[]) {
     colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
     colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
     VkAttachmentDescription depthAttachment{};
@@ -137,7 +122,6 @@ int main(int argc, char* argv[]) {
     depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
     VkAttachmentDescription gColorAttachment{};
@@ -145,9 +129,6 @@ int main(int argc, char* argv[]) {
     gColorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
     gColorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     gColorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    gColorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    gColorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    gColorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     gColorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
     VkAttachmentDescription gPositionAttachment{};
@@ -155,9 +136,6 @@ int main(int argc, char* argv[]) {
     gPositionAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
     gPositionAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     gPositionAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    gPositionAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    gPositionAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    gPositionAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     gPositionAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
     VkAttachmentDescription gNormalSpecAttachment{};
@@ -165,9 +143,6 @@ int main(int argc, char* argv[]) {
     gNormalSpecAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
     gNormalSpecAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     gNormalSpecAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    gNormalSpecAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    gNormalSpecAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    gNormalSpecAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     gNormalSpecAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
     VkAttachmentReference colorAttachmentReference{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
@@ -234,11 +209,11 @@ int main(int argc, char* argv[]) {
         framebuffers.back().create({swapchain.getImageViews()[i], depthImage->getImageView(), gColor->getImageView(), gPosition->getImageView(), gNormalSpec->getImageView()}, swapchain.getExtent().width, swapchain.getExtent().height);
     }
 
-    auto vertCode = readFile("../shaders/vertex.spv");
-    auto fragCode = readFile("../shaders/fragment.spv");
-    auto transparentCode = readFile("../shaders/transparent.spv");
-    auto deferredCode = readFile("../shaders/deferred.spv");
-    auto fullscreenQuadCode = readFile("../shaders/fullscreenQuad.spv");
+    auto vertCode = readFile("shaders/vertex.spv");
+    auto fragCode = readFile("shaders/fragment.spv");
+    auto transparentCode = readFile("shaders/transparent.spv");
+    auto deferredCode = readFile("shaders/deferred.spv");
+    auto fullscreenQuadCode = readFile("shaders/fullscreenQuad.spv");
     ShaderModule vertModule(device, vertCode), fragModule(device, fragCode), transparentModule(device, transparentCode), deferredModule(device, deferredCode), fullscreenQuadModule(device, fullscreenQuadCode);
     ShaderReflection vertexShader(vertCode), fragmentShader(fragCode), transparentShader(transparentCode), deferredShader(deferredCode);
     VkPipelineLayout pipelineLayout = pipelineLayoutCache.createPipelineLayout(vertexShader+fragmentShader);
@@ -252,22 +227,6 @@ int main(int argc, char* argv[]) {
 
     VkRect2D scissor{};
     scissor.extent = swapchain.getExtent();
-
-    VkPipelineColorBlendAttachmentState noBlend{
-            .blendEnable = VK_FALSE,
-            .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
-    };
-
-    VkPipelineColorBlendAttachmentState alphaBlend = {
-            .blendEnable = VK_TRUE,
-            .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
-            .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-            .colorBlendOp = VK_BLEND_OP_ADD,
-            .srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
-            .dstAlphaBlendFactor = VK_BLEND_FACTOR_DST_ALPHA,
-            .alphaBlendOp = VK_BLEND_OP_ADD,
-            .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
-    };
 
     VkPipeline pipeline = GraphicsPipelineBuilder()
             .setShaders(vertModule, fragModule)
@@ -318,7 +277,7 @@ int main(int argc, char* argv[]) {
     Texture voxeliaTexture = Texture::loadImage("/home/honeywrap/Documents/kitten/assets/vokselia_spawn/vokselia_spawn.png");
     voxeliaTexture.pushTexture(resourceManager, stagingBufferManager);
 
-    auto ubo = resourceManager.createBuffer({.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = sizeof(glm::mat4x4)*128, .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT}, {.usage = VMA_MEMORY_USAGE_AUTO});
+    auto ubo = resourceManager.createBuffer({.size = sizeof(glm::mat4x4)*128, .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT});
 
     VkDescriptorSet voxeliaSet;
     VkDescriptorImageInfo descriptorImageInfo = {voxeliaTexture.sampler->getSampler(), voxeliaTexture.image->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
@@ -358,7 +317,6 @@ int main(int argc, char* argv[]) {
     }
 
     auto noiseImage = resourceManager.createImage({
-                                                         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
                                                          .imageType = VK_IMAGE_TYPE_2D,
                                                          .format = VK_FORMAT_R32G32B32_SFLOAT,
                                                          .extent = {4, 4, 1},
@@ -367,21 +325,19 @@ int main(int argc, char* argv[]) {
                                                          .samples = VK_SAMPLE_COUNT_1_BIT,
                                                          .tiling = VK_IMAGE_TILING_LINEAR,
                                                          .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
-                                                 }, {.usage = VMA_MEMORY_USAGE_AUTO});
+                                                 });
 
     noiseImage->createImageView({
-                                         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                                         .image = noiseImage->getImage(),
                                          .viewType = VK_IMAGE_VIEW_TYPE_2D,
                                          .format = VK_FORMAT_R32G32B32_SFLOAT,
                                          .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}
                                  });
 
-    auto noiseSampler = resourceManager.createSampler({.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO, .magFilter=VK_FILTER_LINEAR, .minFilter=VK_FILTER_LINEAR});
+    auto noiseSampler = resourceManager.createSampler({.magFilter=VK_FILTER_LINEAR, .minFilter=VK_FILTER_LINEAR});
 
     stagingBufferManager.stageImageData(ssaoNoise.data(), noiseImage->getImage(), ssaoNoise.size()*sizeof(ssaoNoise[0]), {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, {}, {4, 4, 1});
 
-    auto ssaoSamples = resourceManager.createBuffer({.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = ssaoKernel.size()*sizeof(ssaoKernel[0]), .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT}, {.usage = VMA_MEMORY_USAGE_AUTO});
+    auto ssaoSamples = resourceManager.createBuffer({.size = ssaoKernel.size()*sizeof(ssaoKernel[0]), .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT});
 
     stagingBufferManager.stageBufferData(ssaoKernel.data(), ssaoSamples->getBuffer(), ssaoKernel.size()*sizeof(ssaoKernel[0]));
 

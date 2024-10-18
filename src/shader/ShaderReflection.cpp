@@ -1,31 +1,5 @@
 #include "ShaderReflection.h"
 
-bool DescriptorSetLayoutData::operator==(const DescriptorSetLayoutData &other) const {
-    if (other.bindings.size() != bindings.size()) {
-        return false;
-    } else {
-        for (int i = 0; i < bindings.size(); i++) {
-            if (other.bindings[i].binding != bindings[i].binding)
-                return false;
-            if (other.bindings[i].descriptorType != bindings[i].descriptorType)
-                return false;
-            if (other.bindings[i].descriptorCount != bindings[i].descriptorCount)
-                return false;
-            if (other.bindings[i].stageFlags != bindings[i].stageFlags)
-                return false;
-        }
-        return true;
-    }
-}
-
-VkDescriptorSetLayoutCreateInfo DescriptorSetLayoutData::getCreateInfo() {
-    VkDescriptorSetLayoutCreateInfo createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    createInfo.bindingCount = bindings.size();
-    createInfo.pBindings = bindings.data();
-    return createInfo;
-}
-
 ShaderReflection::ShaderReflection(const std::string &spirvCode) {
     SpvReflectResult result = spvReflectCreateShaderModule(spirvCode.size(), spirvCode.data(), &module);
     if (result != SPV_REFLECT_RESULT_SUCCESS) {

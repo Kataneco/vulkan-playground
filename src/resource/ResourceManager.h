@@ -10,9 +10,9 @@ public:
     explicit ResourceManager(Device &device, MemoryAllocator &memoryAllocator);
     ~ResourceManager();
 
-    std::shared_ptr<Buffer> createBuffer(const VkBufferCreateInfo &bufferInfo, const VmaAllocationCreateInfo &allocInfo, const std::string &debugName = "");
-    std::shared_ptr<Image> createImage(const VkImageCreateInfo &imageInfo, const VmaAllocationCreateInfo &allocInfo, const std::string &debugName = "");
-    std::shared_ptr<Sampler> createSampler(const VkSamplerCreateInfo &samplerInfo, const std::string &debugName = "");
+    std::shared_ptr<Buffer> createBuffer(VkBufferCreateInfo bufferInfo, const VmaAllocationCreateInfo &allocInfo = {.usage = VMA_MEMORY_USAGE_AUTO}, const std::string &debugName = "");
+    std::shared_ptr<Image> createImage(VkImageCreateInfo imageInfo, const VmaAllocationCreateInfo &allocInfo = {.usage = VMA_MEMORY_USAGE_AUTO}, const std::string &debugName = "");
+    std::shared_ptr<Sampler> createSampler(VkSamplerCreateInfo samplerInfo, const std::string &debugName = "");
 
     std::shared_ptr<Buffer> getBuffer(const std::string &debugName) const;
     std::shared_ptr<Image> getImage(const std::string &debugName) const;

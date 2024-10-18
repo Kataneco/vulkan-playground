@@ -6,7 +6,8 @@ ResourceManager::~ResourceManager() {
     cleanup();
 }
 
-std::shared_ptr<Buffer> ResourceManager::createBuffer(const VkBufferCreateInfo& bufferInfo, const VmaAllocationCreateInfo& allocInfo, const std::string& debugName) {
+std::shared_ptr<Buffer> ResourceManager::createBuffer(VkBufferCreateInfo bufferInfo, const VmaAllocationCreateInfo& allocInfo, const std::string& debugName) {
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     auto buffer = std::make_shared<Buffer>(device, memoryAllocator, bufferInfo, allocInfo, debugName);
     if (!debugName.empty()) {
         setDebugName(VK_OBJECT_TYPE_BUFFER, (uint64_t) buffer->getBuffer(), debugName);
@@ -15,7 +16,8 @@ std::shared_ptr<Buffer> ResourceManager::createBuffer(const VkBufferCreateInfo& 
     return buffer;
 }
 
-std::shared_ptr<Image> ResourceManager::createImage(const VkImageCreateInfo& imageInfo, const VmaAllocationCreateInfo& allocInfo, const std::string& debugName) {
+std::shared_ptr<Image> ResourceManager::createImage(VkImageCreateInfo imageInfo, const VmaAllocationCreateInfo& allocInfo, const std::string& debugName) {
+    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     auto image = std::make_shared<Image>(device, memoryAllocator, imageInfo, allocInfo, debugName);
     if (!debugName.empty()) {
         setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t) image->getImage(), debugName);
@@ -24,7 +26,8 @@ std::shared_ptr<Image> ResourceManager::createImage(const VkImageCreateInfo& ima
     return image;
 }
 
-std::shared_ptr<Sampler> ResourceManager::createSampler(const VkSamplerCreateInfo& samplerInfo, const std::string& debugName) {
+std::shared_ptr<Sampler> ResourceManager::createSampler(VkSamplerCreateInfo samplerInfo, const std::string& debugName) {
+    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     auto sampler = std::make_shared<Sampler>(device, samplerInfo, debugName);
     if (!debugName.empty()) {
         setDebugName(VK_OBJECT_TYPE_SAMPLER, (uint64_t) sampler->getSampler(), debugName);
