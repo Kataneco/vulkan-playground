@@ -12,12 +12,12 @@ layout(set = 0, binding = 3) uniform sampler2D texNoise;
 layout(set = 0, binding = 4) uniform readonly block {
     vec3 samples[64];
 } ssaoKernel;
-const float radius = 0.27;
-const float bias = 0.032;
+const float radius = 0.55;
+const float bias = 0.025;
 const int kernelSize = 42;
 
 void main() {
-    const vec2 noiseScale = vec2(pc.screenSize) / 4.0f;
+    const vec2 noiseScale = vec2(pc.screenSize) / 2.0f;
     const vec2 TexCoords = gl_FragCoord.xy / pc.screenSize;
     const vec4 fragPos = imageLoad(gPosition, ivec2(gl_FragCoord.xy));
     const vec4 fragColor = imageLoad(gColor, ivec2(gl_FragCoord.xy));
@@ -40,6 +40,6 @@ void main() {
         occlusion += (sampleDepth >= samplePos.z + bias ? 1.0 : 0.0) * rangeCheck;
     }
     occlusion = 1.0 - (occlusion / kernelSize);
-    float ambient = 0.1f;
+    float ambient = -0.05f;
     outColor = vec4(fragColor.xyz * clamp((occlusion+ambient), 0, 1), 1.0f);
 }
