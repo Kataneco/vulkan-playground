@@ -273,6 +273,7 @@ int main(int argc, char* argv[]) {
 
     Mesh voxelia = Mesh::loadObj("/home/honeywrap/Documents/kitten/assets/vokselia_spawn/vokselia_spawn.obj");
     voxelia.pushMesh(resourceManager, stagingBufferManager);
+    std::cout << "Triangles:" << voxelia.indices.size()/3 << std::endl;
 
     Texture voxeliaTexture = Texture::loadImage("/home/honeywrap/Documents/kitten/assets/vokselia_spawn/vokselia_spawn.png");
     voxeliaTexture.pushTexture(resourceManager, stagingBufferManager);
@@ -293,7 +294,7 @@ int main(int argc, char* argv[]) {
     });
 
     std::uniform_real_distribution<float> randomFloats(0.0, 1.0);
-    std::default_random_engine generator;
+    std::default_random_engine generator(time(NULL));
     std::vector<glm::vec3> ssaoKernel;
     for (unsigned int i = 0; i < 64; ++i) {
         glm::vec3 sample(
@@ -308,7 +309,7 @@ int main(int argc, char* argv[]) {
     }
 
     std::vector<glm::vec3> ssaoNoise;
-    for (unsigned int i = 0; i < 16; i++) {
+    for (unsigned int i = 0; i < 64; i++) {
         glm::vec3 noise(
                 randomFloats(generator) * 2.0 - 1.0,
                 randomFloats(generator) * 2.0 - 1.0,
@@ -319,7 +320,7 @@ int main(int argc, char* argv[]) {
     auto noiseImage = resourceManager.createImage({
                                                          .imageType = VK_IMAGE_TYPE_2D,
                                                          .format = VK_FORMAT_R32G32B32_SFLOAT,
-                                                         .extent = {4, 4, 1},
+                                                         .extent = {8, 8, 1},
                                                          .mipLevels = 1,
                                                          .arrayLayers = 1,
                                                          .samples = VK_SAMPLE_COUNT_1_BIT,
@@ -376,7 +377,7 @@ int main(int argc, char* argv[]) {
     //Camera
     float sensitivity = 0.1f;
     float lastX = 0.0f, lastY = 0.0f;
-    float speed = 2.0f;
+    float speed = 0.75f;
     float yaw = 0.0f, pitch = 0.0f;
     glm::vec3 camera = {0.0f, 0.0f, -1.0f};
     while (!glfwWindowShouldClose(window)) {

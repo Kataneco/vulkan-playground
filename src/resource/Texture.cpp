@@ -2,7 +2,9 @@
 
 Texture Texture::loadImage(const std::string &filePath) {
     Texture texture;
-    stbi_uc *pixels = stbi_load(filePath.c_str(), &texture.width, &texture.height, &texture.channels, STBI_default);
+    stbi_uc *pixels = stbi_load(filePath.c_str(), &texture.width, &texture.height, &texture.channels, 4);
+    //TODO wtf
+    texture.channels = 4;
 
     if (!pixels) {
         //TODO: make default texture
@@ -19,11 +21,11 @@ Texture Texture::loadImage(const std::string &filePath) {
 VkFormat getFormat(int channels) {
     switch (channels) {
         case 1:
-            return VK_FORMAT_R8_SRGB;
+            return VK_FORMAT_R8_UNORM;
         case 2:
-            return VK_FORMAT_R8G8_SRGB;
+            return VK_FORMAT_R8G8_UNORM;
         case 3:
-            return VK_FORMAT_R8G8B8_SRGB;
+            return VK_FORMAT_R8G8B8_UNORM;
         case 4:
             return VK_FORMAT_R8G8B8A8_SRGB;
         default:

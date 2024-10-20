@@ -20,8 +20,6 @@ add_executable(kitten main.cpp
         src/core/Swapchain.h
         src/pipeline/GraphicsPipelineBuilder.cpp
         src/pipeline/GraphicsPipelineBuilder.h
-        src/pipeline/PipelineCache.cpp
-        src/pipeline/PipelineCache.h
         src/pipeline/PipelineLayoutManager.cpp
         src/pipeline/PipelineLayoutManager.h
         src/descriptor/DescriptorSetManager.cpp
