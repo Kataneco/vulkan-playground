@@ -14,7 +14,7 @@ layout(set = 0, binding = 4) uniform readonly block {
 } ssaoKernel;
 const float radius = 0.55;
 const float bias = 0.025;
-const int kernelSize = 42;
+const int kernelSize = 4;
 
 void main() {
     const vec2 noiseScale = vec2(pc.screenSize) / 2.0f;
