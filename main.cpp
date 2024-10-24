@@ -271,7 +271,7 @@ int main(int argc, char* argv[]) {
     std::vector<CommandBuffer> commandBuffers = commandPool.allocateCommandBuffers(swapchain.getImageCount());
     CommandBuffer cont = commandPool.allocateCommandBuffer();
 
-    Mesh voxelia = Mesh::loadObj("/home/honeywrap/Documents/kitten/assets/vokselia_spawn/vokselia_spawn.obj");
+    Mesh voxelia = Mesh::loadObj("/home/honeywrap/Documents/kitten/assets/dragon.obj");
     voxelia.pushMesh(resourceManager, stagingBufferManager);
     std::cout << "Triangles:" << voxelia.indices.size()/3 << std::endl;
 
@@ -297,23 +297,16 @@ int main(int argc, char* argv[]) {
     std::default_random_engine generator(time(NULL));
     std::vector<glm::vec3> ssaoKernel;
     for (unsigned int i = 0; i < 64; ++i) {
-        glm::vec3 sample(
-                randomFloats(generator) * 2.0 - 1.0,
-                randomFloats(generator) * 2.0 - 1.0,
-                randomFloats(generator)
-        );
-        float scale = (float)i / 64.0;
-        scale   = lerp(0.1f, 1.0f, scale * scale);
+        glm::vec3 sample(randomFloats(generator) * 2.0 - 1.0, randomFloats(generator) * 2.0 - 1.0, randomFloats(generator));
+        float scale = (float) i / 64.0;
+        scale = lerp(0.1f, 1.0f, scale * scale);
         sample *= scale;
         ssaoKernel.push_back(sample);
     }
 
     std::vector<glm::vec3> ssaoNoise;
     for (unsigned int i = 0; i < 64; i++) {
-        glm::vec3 noise(
-                randomFloats(generator) * 2.0 - 1.0,
-                randomFloats(generator) * 2.0 - 1.0,
-                0.0f);
+        glm::vec3 noise(randomFloats(generator) * 2.0 - 1.0, randomFloats(generator) * 2.0 - 1.0, 0.0f);
         ssaoNoise.push_back(noise);
     }
 
@@ -335,11 +328,9 @@ int main(int argc, char* argv[]) {
                                  });
 
     auto noiseSampler = resourceManager.createSampler({.magFilter=VK_FILTER_LINEAR, .minFilter=VK_FILTER_LINEAR});
-
     stagingBufferManager.stageImageData(ssaoNoise.data(), noiseImage->getImage(), ssaoNoise.size()*sizeof(ssaoNoise[0]), {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, {}, {4, 4, 1});
 
     auto ssaoSamples = resourceManager.createBuffer({.size = ssaoKernel.size()*sizeof(ssaoKernel[0]), .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT});
-
     stagingBufferManager.stageBufferData(ssaoKernel.data(), ssaoSamples->getBuffer(), ssaoKernel.size()*sizeof(ssaoKernel[0]));
 
     stagingBufferManager.flush();
