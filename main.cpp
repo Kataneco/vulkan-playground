@@ -55,6 +55,13 @@ int main(int argc, char* argv[]) {
 
     std::vector<CommandBuffer> commandBuffers = commandPool.allocateCommandBuffers(swapchain.getImageCount());
 
+    auto vertexBuffer = resourceManager.createBuffer({.size = sizeof(Vertex)*1024*1024, .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT});
+    auto indexBuffer = resourceManager.createBuffer({.size = sizeof(uint32_t )*1024*1024, .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT});
+    auto voxelBuffer = resourceManager.createBuffer({.size = sizeof(Voxel)*1024*1024, .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT});
+    auto svoBuffer = resourceManager.createBuffer({.size = sizeof(OctreeNode)*1024*1024*2, .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT});
+    auto voxelCountBuffer = resourceManager.createBuffer({.size = sizeof(uint32_t), .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT}); //Atomix
+    auto nodeCountBuffer = resourceManager.createBuffer({.size = sizeof(uint32_t), .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT}); //Atomix
+
     //Main rendering loop
     uint32_t frame = 0;
     const auto start = std::chrono::high_resolution_clock::now(); //Timestamp for rendering start
