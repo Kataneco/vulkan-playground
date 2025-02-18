@@ -1,0 +1,86 @@
+#version 450
+#extension GL_ARB_separate_shader_objects : enable
+
+layout(local_size_x = 256) in;
+
+// Input voxel data
+struct Voxel {
+    uint mortonCode;
+    vec4 color;
+};
+
+// Octree node structure
+struct OctreeNode {
+    uint childPointers[8];  // Index to child nodes, 0 means no child
+    vec4 color;            // Node color (averaged from children)
+    uint leafFlag;         // 1 if leaf, 0 if internal node
+};
+
+// Bindings
+layout(std430, binding = 0) readonly buffer VoxelBuffer {
+    Voxel voxels[];
+};
+
+layout(std430, binding = 1) buffer OctreeBuffer {
+    OctreeNode nodes[];
+};
+
+layout(std430, binding = 2) buffer NodeCountBuffer {
+    uint nodeCount;
+};
+
+// Shared memory for temporary node data
+shared uint sharedChildIndices[256];
+shared uint sharedNodeFlags[256];
+
+// Extract level and child index from Morton code
+uint getLevel(uint mortonCode, uint level) {
+    uint shift = (level * 3);
+    return (mortonCode >> shift) & 0x7;
+}
+
+// Atomic node allocation
+uint allocateNode() {
+    return atomicAdd(nodeCount, 1);
+}
+
+void main() {
+    uint voxelIdx = gl_GlobalInvocationID.x;
+    if (voxelIdx >= voxels.length()) return;
+
+    // Get current voxel's Morton code
+    uint currentCode = voxels[voxelIdx].mortonCode;
+
+    // Process each level of the octree from bottom to top
+    for (uint level = 10; level > 0; level--) {  // Assuming max 10 levels
+                                                 uint childIdx = getLevel(currentCode, level - 1);
+                                                 uint parentCode = currentCode >> 3;  // Parent's Morton code
+
+                                                 // First thread in a group of 8 (sharing same parent) creates parent node
+                                                 bool isFirstChild = (voxelIdx == 0) ||
+                                                 (parentCode != (voxels[voxelIdx - 1].mortonCode >> 3));
+
+                                                 if (isFirstChild) {
+                                                     uint nodeIdx = allocateNode();
+
+                                                     // Initialize node
+                                                     nodes[nodeIdx].leafFlag = 0;
+                                                     for (uint i = 0; i < 8; i++) {
+                                                         nodes[nodeIdx].childPointers[i] = 0;
+                                                     }
+
+                                                     // Link child to parent
+                                                     if (level < 10) {  // Skip for root level
+                                                                        uint parentIdx = nodes[nodeIdx].childPointers[childIdx];
+                                                                        nodes[parentIdx].childPointers[childIdx] = nodeIdx;
+                                                     }
+                                                 }
+
+                                                 // Update color (weighted average of children)
+                                                 vec4 voxelColor = voxels[voxelIdx].color;
+                                                 atomicAdd(nodes[nodeIdx].color.r, voxelColor.r);
+                                                 atomicAdd(nodes[nodeIdx].color.g, voxelColor.g);
+                                                 atomicAdd(nodes[nodeIdx].color.b, voxelColor.b);
+                                                 atomicAdd(nodes[nodeIdx].color.a, voxelColor.a);
+    }
+}
