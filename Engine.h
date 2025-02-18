@@ -28,6 +28,7 @@
 #include "util/Window.h"
 #include "resource/Texture.h"
 #include "resource/ResourceBarrier.h"
+#include "experimental/voxel.h"
 
 constexpr VkPipelineColorBlendAttachmentState noBlend{
         .blendEnable = VK_FALSE,
