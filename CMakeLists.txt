@@ -76,6 +76,8 @@ add_executable(kitten main.cpp
         src/util/Window.h
         src/resource/Texture.cpp
         src/resource/Texture.h
+        src/experimental/voxel.cpp
+        src/experimental/voxel.h
 )
 
 target_link_libraries(kitten glfw)
