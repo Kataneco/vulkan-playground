@@ -133,12 +133,13 @@ VkDescriptorSetLayout DescriptorLayoutCache::createDescriptorLayout(VkDescriptor
         });
     }
 
-    auto it = layoutCache.find(layoutinfo);
-    if (it != layoutCache.end())
-        return (*it).second;
+    if (layoutCache.contains(layoutinfo))
+        return layoutCache[layoutinfo];
+
+    VkDescriptorSetLayoutCreateInfo sortedInfo = layoutinfo.getCreateInfo();
 
     VkDescriptorSetLayout layout;
-    vkCreateDescriptorSetLayout(device, info, nullptr, &layout);
+    vkCreateDescriptorSetLayout(device, &sortedInfo, nullptr, &layout);
     layoutCache[layoutinfo] = layout;
     return layout;
 }

@@ -38,7 +38,7 @@ void Swapchain::create(int width, int height) {
     VkSwapchainCreateInfoKHR swapchainCreateInfo{};
     swapchainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     swapchainCreateInfo.surface = surface;
-    swapchainCreateInfo.minImageCount = 3;
+    swapchainCreateInfo.minImageCount = 4;
     swapchainCreateInfo.imageFormat = imageFormat;
     swapchainCreateInfo.imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
     swapchainCreateInfo.imageExtent = extent;

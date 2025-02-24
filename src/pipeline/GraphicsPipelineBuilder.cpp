@@ -19,6 +19,33 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::setShaders(VkShaderModule vert
     return *this;
 }
 
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::setShaders(VkShaderModule vertShader, VkShaderModule geomShader, VkShaderModule fragShader) {
+    VkPipelineShaderStageCreateInfo vertexShaderStageCreateInfo{};
+    vertexShaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    vertexShaderStageCreateInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+    vertexShaderStageCreateInfo.module = vertShader;
+    vertexShaderStageCreateInfo.pName = "main";
+
+    shaderStages.push_back(vertexShaderStageCreateInfo);
+
+    VkPipelineShaderStageCreateInfo geometryShaderStageCreateInfo{};
+    geometryShaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    geometryShaderStageCreateInfo.stage = VK_SHADER_STAGE_GEOMETRY_BIT;
+    geometryShaderStageCreateInfo.module = geomShader;
+    geometryShaderStageCreateInfo.pName = "main";
+
+    shaderStages.push_back(geometryShaderStageCreateInfo);
+
+    VkPipelineShaderStageCreateInfo fragmentShaderStageCreateInfo{};
+    fragmentShaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    fragmentShaderStageCreateInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    fragmentShaderStageCreateInfo.module = fragShader;
+    fragmentShaderStageCreateInfo.pName = "main";
+
+    shaderStages.push_back(fragmentShaderStageCreateInfo);
+    return *this;
+}
+
 GraphicsPipelineBuilder& GraphicsPipelineBuilder::setVertexInputState(const std::vector<VkVertexInputBindingDescription>& bindingDescs, const std::vector<VkVertexInputAttributeDescription>& attributeDescs) {
     bindingDescriptions = bindingDescs;
     attributeDescriptions = attributeDescs;

@@ -6,12 +6,13 @@ struct Vertex {
     vec3 position;
     vec3 normal;
     vec2 texCoord;
+    vec4 instanceColor;
 };
 
 struct Voxel {
-    uint morton; //interleaved xyz
-    uint section; //extension
-    uint color; //4x8bit RGBA
+    uint morton;
+    uint section;
+    uint color;
     vec3 normal;
 };
 
@@ -31,72 +32,59 @@ layout(std430, set = 0, binding = 3) buffer VoxelCountBuffer {
     uint voxelCount;
 };
 
-// Uniform data
 layout(push_constant) uniform PushConstants {
-    vec3 voxelGridSize;     // Total grid size (can be > 1024³)
-    float voxelSize;        // Size of each voxel in world space
-    vec3 gridOrigin;        // World space origin of voxel grid
-    uint maxVoxels;         // Maximum number of voxels to generate
-    vec3 gridOffset;        // Offset to handle negative coordinates
+    vec3 voxelGridSize;
+    float voxelSize;
+    vec3 gridOrigin;
+    uint maxVoxels;
+    vec3 gridOffset;
+    uint triangleOffset;
+    uint triangleCount;
 } constants;
 
-// Split position into section and local coordinates
-void decomposePosition(uvec3 globalPos, out uvec3 sectionPos, out uvec3 localPos) {
-    sectionPos = globalPos >> 10u; // Divide by 1024
-    localPos = globalPos & 1023u;  // Modulo 1024
+// Morton code utilities
+uint expandBits(uint v) {
+    v = (v * 0x00010001u) & 0xFF0000FFu;
+    v = (v * 0x00000101u) & 0x0F00F00Fu;
+    v = (v * 0x00000011u) & 0xC30C30C3u;
+    v = (v * 0x00000005u) & 0x49249249u;
+    return v;
 }
 
-// Encode section indices into single uint
-uint encodeSectionCode(uvec3 sectionPos) {
-    return sectionPos.x | (sectionPos.y << 10u) | (sectionPos.z << 20u);
+uint morton3D(uvec3 pos) {
+    return (expandBits(pos.z) << 2) + (expandBits(pos.y) << 1) + expandBits(pos.x);
 }
 
-// Morton encode local coordinates (within 1024³ section)
-uint encodeMortonLocal(uvec3 pos) {
-    uint x = pos.x & 1023u;
-    uint y = pos.y & 1023u;
-    uint z = pos.z & 1023u;
-
-    x = (x | (x << 16)) & 0x030000FF;
-    x = (x | (x << 8))  & 0x0300F00F;
-    x = (x | (x << 4))  & 0x030C30C3;
-    x = (x | (x << 2))  & 0x09249249;
-
-    y = (y | (y << 16)) & 0x030000FF;
-    y = (y | (y << 8))  & 0x0300F00F;
-    y = (y | (y << 4))  & 0x030C30C3;
-    y = (y | (y << 2))  & 0x09249249;
-
-    z = (z | (z << 16)) & 0x030000FF;
-    z = (z | (z << 8))  & 0x0300F00F;
-    z = (z | (z << 4))  & 0x030C30C3;
-    z = (z | (z << 2))  & 0x09249249;
-
-    return x | (y << 1) | (z << 2);
+// Convert world position to grid position
+uvec3 worldToGrid(vec3 worldPos) {
+    vec3 localPos = worldPos - constants.gridOrigin - constants.gridOffset;
+    vec3 normalizedPos = localPos / constants.voxelSize;
+    return uvec3(clamp(normalizedPos, vec3(0), constants.voxelGridSize - vec3(1)));
 }
 
-// Check if point is inside triangle (projected on 2D plane)
-bool pointInTriangle(vec2 p, vec2 a, vec2 b, vec2 c) {
-    vec2 v0 = c - a;
-    vec2 v1 = b - a;
-    vec2 v2 = p - a;
+// Atomic voxel insertion
+void insertVoxel(uvec3 gridPos, vec3 normal, vec4 color) {
+    uint morton = morton3D(gridPos);
+    uint section = (gridPos.x / 4) + (gridPos.y / 4) * (uint(constants.voxelGridSize.x) / 4) +
+    (gridPos.z / 4) * (uint(constants.voxelGridSize.x) / 4) * (uint(constants.voxelGridSize.y) / 4);
 
-    float d00 = dot(v0, v0);
-    float d01 = dot(v0, v1);
-    float d11 = dot(v1, v1);
-    float d20 = dot(v2, v0);
-    float d21 = dot(v2, v1);
+    // Pack color into uint (RGBA8 format)
+    uint packedColor = uint(color.r * 255.0) |
+    (uint(color.g * 255.0) << 8) |
+    (uint(color.b * 255.0) << 16) |
+    (uint(color.a * 255.0) << 24);
 
-    float denom = d00 * d11 - d01 * d01;
-    float v = (d11 * d20 - d01 * d21) / denom;
-    float w = (d00 * d21 - d01 * d20) / denom;
-    float u = 1.0f - v - w;
-
-    return v >= 0.0f && w >= 0.0f && (v + w) <= 1.0f;
+    // Atomic insertion
+    uint index = atomicAdd(voxelCount, 1);
+    if (index < constants.maxVoxels) {
+        voxels[index].morton = morton;
+        voxels[index].section = section;
+        voxels[index].color = packedColor;
+        voxels[index].normal = normal;
+    }
 }
 
-// Calculate barycentric coordinates
-vec3 calculateBarycentricCoords(vec3 p, vec3 a, vec3 b, vec3 c) {
+vec3 barycentric(vec3 p, vec3 a, vec3 b, vec3 c) {
     vec3 v0 = b - a;
     vec3 v1 = c - a;
     vec3 v2 = p - a;
@@ -110,125 +98,50 @@ vec3 calculateBarycentricCoords(vec3 p, vec3 a, vec3 b, vec3 c) {
     float denom = d00 * d11 - d01 * d01;
     float v = (d11 * d20 - d01 * d21) / denom;
     float w = (d00 * d21 - d01 * d20) / denom;
-    float u = 1.0f - v - w;
+    float u = 1.0 - v - w;
 
     return vec3(u, v, w);
 }
 
-// Pack RGB color into uint
-uint packColor(vec3 color) {
-    return (uint(color.r * 255.0) << 24) |
-    (uint(color.g * 255.0) << 16) |
-    (uint(color.b * 255.0) << 8) |
-    255u; // Alpha = 255
-}
-
 void voxelizeTriangle(uint triangleIndex) {
-    // Get vertex indices
+    // Get triangle vertices
     uint i0 = indices[triangleIndex * 3];
     uint i1 = indices[triangleIndex * 3 + 1];
     uint i2 = indices[triangleIndex * 3 + 2];
 
-    // Get vertices
-    Vertex v0 = vertices[i0];
-    Vertex v1 = vertices[i1];
-    Vertex v2 = vertices[i2];
+    vec3 v0 = vertices[i0].position;
+    vec3 v1 = vertices[i1].position;
+    vec3 v2 = vertices[i2].position;
 
-    // Transform vertices to voxel space with offset
-    vec3 p0 = (v0.position - constants.gridOrigin) / constants.voxelSize + constants.gridOffset;
-    vec3 p1 = (v1.position - constants.gridOrigin) / constants.voxelSize + constants.gridOffset;
-    vec3 p2 = (v2.position - constants.gridOrigin) / constants.voxelSize + constants.gridOffset;
+    // Calculate triangle normal and area
+    vec3 edge1 = v1 - v0;
+    vec3 edge2 = v2 - v0;
+    vec3 normal = normalize(cross(edge1, edge2));
 
-    // Calculate triangle AABB in voxel space
-    vec3 minPos = min(min(p0, p1), p2);
-    vec3 maxPos = max(max(p0, p1), p2);
+    // Calculate triangle bounds in grid space
+    uvec3 minGrid = worldToGrid(min(min(v0, v1), v2));
+    uvec3 maxGrid = worldToGrid(max(max(v0, v1), v2));
 
-    // Clamp to grid bounds
-    ivec3 minVoxel = ivec3(max(floor(minPos), vec3(0)));
-    ivec3 maxVoxel = ivec3(min(ceil(maxPos), constants.voxelGridSize - 1.0));
+    // Interpolate vertex colors
+    vec4 c0 = vertices[i0].instanceColor;
+    vec4 c1 = vertices[i1].instanceColor;
+    vec4 c2 = vertices[i2].instanceColor;
 
-    // Iterate through potential voxels
-    for (int x = minVoxel.x; x <= maxVoxel.x; x++) {
-        for (int y = minVoxel.y; y <= maxVoxel.y; y++) {
-            for (int z = minVoxel.z; z <= maxVoxel.z; z++) {
-                vec3 voxelCenter = vec3(x, y, z) + 0.5 - constants.gridOffset;
+    // Voxelize the triangle using a 3D variant of the scanline algorithm
+    for (uint z = minGrid.z; z <= maxGrid.z; z++) {
+        for (uint y = minGrid.y; y <= maxGrid.y; y++) {
+            for (uint x = minGrid.x; x <= maxGrid.x; x++) {
+                // Calculate voxel center in world space
+                vec3 voxelCenter = constants.gridOrigin + constants.gridOffset +
+                vec3(x, y, z) * constants.voxelSize +
+                vec3(constants.voxelSize * 0.5);
 
-                // Test voxel center against triangle using 2D projections
-                bool intersects = false;
-
-                // Test XY projection
-                if (!intersects) {
-                    intersects = pointInTriangle(
-                        voxelCenter.xy,
-                        p0.xy - constants.gridOffset.xy,
-                        p1.xy - constants.gridOffset.xy,
-                        p2.xy - constants.gridOffset.xy
-                    );
-                }
-
-                // Test YZ projection
-                if (!intersects) {
-                    intersects = pointInTriangle(
-                        voxelCenter.yz,
-                        p0.yz - constants.gridOffset.yz,
-                        p1.yz - constants.gridOffset.yz,
-                        p2.yz - constants.gridOffset.yz
-                    );
-                }
-
-                // Test XZ projection
-                if (!intersects) {
-                    intersects = pointInTriangle(
-                        voxelCenter.xz,
-                        p0.xz - constants.gridOffset.xz,
-                        p1.xz - constants.gridOffset.xz,
-                        p2.xz - constants.gridOffset.xz
-                    );
-                }
-
-                if (intersects) {
-                    // Calculate barycentric coordinates for interpolation
-                    vec3 bary = calculateBarycentricCoords(
-                        voxelCenter,
-                        p0 - constants.gridOffset,
-                        p1 - constants.gridOffset,
-                        p2 - constants.gridOffset
-                    );
-
-                    // Interpolate normal
-                    vec3 normal = normalize(
-                        v0.normal * bary.x +
-                        v1.normal * bary.y +
-                        v2.normal * bary.z
-                    );
-
-                    // Calculate UV coordinates for texture lookup
-                    vec2 uv = v0.texCoord * bary.x +
-                    v1.texCoord * bary.y +
-                    v2.texCoord * bary.z;
-
-                    // For this example, we'll use UV coordinates as color
-                    // Replace this with actual texture sampling if needed
-                    vec3 color = vec3(uv, 0.5);
-                    uint packedColor = packColor(color);
-
-                    // Calculate section and local position
-                    uvec3 globalPos = uvec3(x, y, z);
-                    uvec3 sectionPos, localPos;
-                    decomposePosition(globalPos, sectionPos, localPos);
-
-                    // Encode position
-                    uint morton = encodeMortonLocal(localPos);
-                    uint section = encodeSectionCode(sectionPos);
-
-                    // Store voxel
-                    uint index = atomicAdd(voxelCount, 1);
-                    if (index < constants.maxVoxels) {
-                        voxels[index].morton = morton;
-                        voxels[index].section = section;
-                        voxels[index].color = packedColor;
-                        voxels[index].normal = normal;
-                    }
+                // Check if voxel center is inside triangle
+                vec3 bary = barycentric(voxelCenter, v0, v1, v2);
+                if (bary.x >= 0.0 && bary.y >= 0.0 && bary.z >= 0.0) {
+                    // Interpolate color using barycentric coordinates
+                    vec4 color = c0 * bary.x + c1 * bary.y + c2 * bary.z;
+                    insertVoxel(uvec3(x, y, z), normal, color);
                 }
             }
         }
@@ -236,8 +149,10 @@ void voxelizeTriangle(uint triangleIndex) {
 }
 
 void main() {
-    uint triangleIdx = gl_GlobalInvocationID.x;
-    if (triangleIdx >= indices.length() / 3) return;
-
-    voxelizeTriangle(triangleIdx);
+    const uint work = constants.triangleCount/(gl_WorkGroupSize.x*gl_NumWorkGroups.x);
+    for (uint i = 0; i < work; i++) {
+        uint triangleIndex = work * i + gl_GlobalInvocationID.x;
+        if (triangleIndex >= constants.triangleCount) break;
+        voxelizeTriangle(triangleIndex + constants.triangleOffset);
+    }
 }

@@ -46,8 +46,14 @@ Device::Device(VulkanInstance& vulkanInstance, VkPhysicalDeviceFeatures enabledF
 
     VkDeviceQueueCreateInfo queueCreateInfos[3] = {graphicsQueueCreateInfo, computeQueueCreateInfo, transferQueueCreateInfo};
 
+    //Imageless framebuffers
+    VkPhysicalDeviceVulkan12Features vulkan12Features{};
+    vulkan12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+    vulkan12Features.imagelessFramebuffer = VK_TRUE;
+
     VkDeviceCreateInfo deviceCreateInfo{};
     deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    deviceCreateInfo.pNext = &vulkan12Features;
     deviceCreateInfo.queueCreateInfoCount = 3;
     deviceCreateInfo.pQueueCreateInfos = queueCreateInfos;
     deviceCreateInfo.pEnabledFeatures = &enabledFeatures;

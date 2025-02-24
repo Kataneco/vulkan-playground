@@ -4,6 +4,7 @@
 class GraphicsPipelineBuilder {
 public:
     GraphicsPipelineBuilder &setShaders(VkShaderModule vertShader, VkShaderModule fragShader);
+    GraphicsPipelineBuilder &setShaders(VkShaderModule vertShader, VkShaderModule geomShader, VkShaderModule fragShader);
     GraphicsPipelineBuilder &setVertexInputState(const std::vector<VkVertexInputBindingDescription> &bindingDescs, const std::vector<VkVertexInputAttributeDescription> &attributeDescs);
     GraphicsPipelineBuilder &setInputAssemblyState(VkPrimitiveTopology topology, VkBool32 primitiveRestartEnable = VK_FALSE);
     GraphicsPipelineBuilder &setViewportState(const VkViewport &viewport, const VkRect2D &scissor);
