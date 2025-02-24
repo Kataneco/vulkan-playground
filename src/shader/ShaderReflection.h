@@ -50,3 +50,6 @@ private:
 };
 
 ShaderCombo operator+(const ShaderReflection &a, const ShaderReflection &b);
+ShaderCombo operator+(const ShaderCombo &a, const ShaderReflection &b);
+ShaderCombo operator+(const ShaderReflection &a, const ShaderCombo &b);
+ShaderCombo operator+(const ShaderCombo &a, const ShaderCombo &b);

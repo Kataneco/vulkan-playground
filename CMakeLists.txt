@@ -88,10 +88,10 @@ find_program(GLSLC_EXECUTABLE glslc)
 set(SHADER_DIR "${CMAKE_SOURCE_DIR}/shaders")
 set(COMPILED_SHADER_DIR "${CMAKE_BINARY_DIR}/shaders")
 
-file(GLOB SHADER_FILES "${SHADER_DIR}/*.vert" "${SHADER_DIR}/*.frag" "${SHADER_DIR}/*.comp")
+file(GLOB SHADER_FILES "${SHADER_DIR}/*.vert" "${SHADER_DIR}/*.frag" "${SHADER_DIR}/*.comp" "${SHADER_DIR}/*.geom")
 
 foreach(SHADER_FILE ${SHADER_FILES})
-    get_filename_component(SHADER_NAME ${SHADER_FILE} NAME_WE)
+    get_filename_component(SHADER_NAME ${SHADER_FILE} NAME)
     set(COMPILED_SHADER_FILE "${COMPILED_SHADER_DIR}/${SHADER_NAME}.spv")
 
     add_custom_command(

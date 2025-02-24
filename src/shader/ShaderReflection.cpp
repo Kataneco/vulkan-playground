@@ -88,28 +88,30 @@ void ShaderReflection::reflectPushConstantRanges() {
 }
 
 void ShaderCombo::mergeDescriptorSetLayouts(const std::vector<DescriptorSetLayoutData>& other) {
-    std::unordered_map<uint32_t, DescriptorSetLayoutData> setMap;
+    std::map<uint32_t, DescriptorSetLayoutData> setMap;
 
     for (const auto& layout : descriptorSetLayouts) {
-        setMap[layout.set] = std::move(layout);
+        setMap[layout.set] = layout;
     }
 
     for (const auto& newLayout : other) {
-        auto& existingLayout = setMap[newLayout.set];
-        for (const auto& newBinding : newLayout.bindings) {
+        auto &existingLayout = setMap[newLayout.set];
+        for (const auto &newBinding: newLayout.bindings) {
             auto it = std::find_if(existingLayout.bindings.begin(), existingLayout.bindings.end(),
-                                   [&](const auto& b) { return b.binding == newBinding.binding; });
+                                   [&](const auto &b) { return b.binding == newBinding.binding; });
 
             if (it == existingLayout.bindings.end()) {
                 existingLayout.bindings.push_back(newBinding);
             } else {
                 it->stageFlags |= newBinding.stageFlags;
+                if (it->descriptorType != newBinding.descriptorType) std::cerr << "Warning: Conflicting set layout binding descriptor types" << std::endl;
             }
         }
     }
 
     descriptorSetLayouts.clear();
-    for (auto& [_, layout] : setMap) {
+    for (auto& [set, layout] : setMap) {
+        layout.set = set;
         descriptorSetLayouts.push_back(std::move(layout));
     }
 }
@@ -153,6 +155,27 @@ ShaderCombo& ShaderCombo::operator+=(const ShaderCombo& o) {
 }
 
 ShaderCombo operator+(const ShaderReflection &a, const ShaderReflection &b) {
+    ShaderCombo result;
+    result += a;
+    result += b;
+    return result;
+}
+
+ShaderCombo operator+(const ShaderCombo &a, const ShaderReflection &b) {
+    ShaderCombo result;
+    result += a;
+    result += b;
+    return result;
+}
+
+ShaderCombo operator+(const ShaderReflection &a, const ShaderCombo &b) {
+    ShaderCombo result;
+    result += a;
+    result += b;
+    return result;
+}
+
+ShaderCombo operator+(const ShaderCombo &a, const ShaderCombo &b) {
     ShaderCombo result;
     result += a;
     result += b;

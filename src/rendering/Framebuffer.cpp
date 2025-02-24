@@ -35,5 +35,14 @@ void Framebuffer::create(const std::vector<VkImageView> &attachments, uint32_t w
     framebufferCreateInfo.height = height;
     framebufferCreateInfo.layers = layers;
 
+    VkFramebufferAttachmentsCreateInfo FACI{};
+    FACI.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENTS_CREATE_INFO;
+    FACI.attachmentImageInfoCount = 0;
+
+    if (attachments.empty()) {
+        framebufferCreateInfo.flags = VK_FRAMEBUFFER_CREATE_IMAGELESS_BIT;
+        framebufferCreateInfo.pNext = &FACI;
+    }
+
     vkCreateFramebuffer(device, &framebufferCreateInfo, nullptr, &framebuffer);
 }

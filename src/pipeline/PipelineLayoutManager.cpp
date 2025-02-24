@@ -13,7 +13,7 @@ void PipelineLayoutCache::destroy() {
 }
 
 VkPipelineLayout PipelineLayoutCache::createPipelineLayout(const std::vector<DescriptorSetLayoutData>& descriptorSetLayoutData, std::vector<VkPushConstantRange> pushConstantRanges) {
-    std::unordered_map<uint32_t, DescriptorSetLayoutData> sets;
+    std::map<uint32_t, DescriptorSetLayoutData> sets;
     for (const auto &d: descriptorSetLayoutData) {
         if (!sets.contains(d.set)) {
             sets[d.set] = d;
@@ -39,9 +39,8 @@ VkPipelineLayout PipelineLayoutCache::createPipelineLayout(const std::vector<Des
         hash = hash_combine(hash, packed);
     }
 
-    auto it = layoutCache.find(hash);
-    if (it != layoutCache.end())
-        return (*it).second;
+    if (layoutCache.contains(hash))
+        return layoutCache[hash];
 
     std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
     descriptorSetLayouts.reserve(sets.size());

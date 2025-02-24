@@ -38,7 +38,7 @@ void ResourceBarrier::transitionImageLayout(VkCommandBuffer commandBuffer, VkIma
     );
 }
 
-void ResourceBarrier::bufferMemoryBarrier(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkDeviceSize size, VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask, uint32_t srcQueueFamilyIndex, uint32_t dstQueueFamilyIndex) {
+void ResourceBarrier::bufferMemoryBarrier(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkDeviceSize size, VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask, VkPipelineStageFlags sourceStage, VkPipelineStageFlags destinationStage, uint32_t srcQueueFamilyIndex, uint32_t dstQueueFamilyIndex) {
     VkBufferMemoryBarrier barrier{};
     barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
     barrier.buffer = buffer;
@@ -48,9 +48,6 @@ void ResourceBarrier::bufferMemoryBarrier(VkCommandBuffer commandBuffer, VkBuffe
     barrier.dstAccessMask = dstAccessMask;
     barrier.srcQueueFamilyIndex = srcQueueFamilyIndex;
     barrier.dstQueueFamilyIndex = dstQueueFamilyIndex;
-
-    VkPipelineStageFlags sourceStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-    VkPipelineStageFlags destinationStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 
     vkCmdPipelineBarrier(
             commandBuffer,
