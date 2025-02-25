@@ -8,6 +8,13 @@ Device::Device(VulkanInstance& vulkanInstance, VkPhysicalDeviceFeatures enabledF
     uint32_t ione = 1;
     vkEnumeratePhysicalDevices(vulkanInstance.instance, &ione, &physicalDevice);
 
+    /*
+    VkPhysicalDevice dvcs[2];
+    uint32_t itwo = 2;
+    vkEnumeratePhysicalDevices(vulkanInstance.instance, &itwo, dvcs);
+    physicalDevice = dvcs[1];
+    */
+
     uint32_t queueFamilyCount = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, nullptr);
 
