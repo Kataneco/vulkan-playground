@@ -136,8 +136,11 @@ int main(int argc, char* argv[]) {
     std::vector<CommandBuffer> commandBuffers = commandPool.allocateCommandBuffers(swapchain.getImageCount());
 
     //Experimental
-    Mesh dragon = Mesh::loadObj("/home/honeywrap/Documents/kitten/assets/sibenik/sibenik.obj");
+    Mesh dragon = Mesh::loadObj("/home/honeywrap/Documents/kitten/assets/dragon.obj");
     dragon.pushMesh(resourceManager, stagingBufferManager);
+
+    Mesh bunny = Mesh::loadObj("/home/honeywrap/Documents/kitten/assets/bunny.obj");
+    bunny.pushMesh(resourceManager, stagingBufferManager);
 
     auto objectData = resourceManager.createBuffer({.size = sizeof(glm::mat4x4)*1024, .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT});
 
@@ -178,6 +181,12 @@ int main(int argc, char* argv[]) {
             .bind_buffer(0, &dragonSetInfo, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)
             .build(dragonSet);
 
+    VkDescriptorSet bunnySet;
+    VkDescriptorBufferInfo bunnySetInfo = {objectData->getBuffer(), sizeof(glm::mat4x4), sizeof(glm::mat4x4)};
+    DescriptorBuilder(descriptorLayoutCache, descriptorAllocator)
+            .bind_buffer(0, &bunnySetInfo, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)
+            .build(bunnySet);
+
     //Voxeldisplay exclusive
     VkDescriptorSet voxeldisplayDataSet;
     DescriptorBuilder(descriptorLayoutCache, descriptorAllocator)
@@ -208,7 +217,7 @@ int main(int argc, char* argv[]) {
 
     VoxelizerData dragonVoxelizerConstants{
             {0, 0, 0},
-            {1024, 1024, 1.0f/256.0f}
+            {2048, 2048, 1.0f/512.0f}
     };
 
     glm::vec4 grid = glm::vec4(dragonVoxelizerConstants.center, dragonVoxelizerConstants.resolution.z);
@@ -302,8 +311,10 @@ int main(int argc, char* argv[]) {
         commandBuffer.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
         //Experimental
-        glm::mat4 model = glm::scale(glm::vec3(1.0f,1.0f,1.0f)*0.01f)*glm::rotate(glm::radians(time*2.5f*0), glm::vec3(0.0f, 1.0f, 0.0f))*glm::translate(glm::vec3(0,0,0));
+        glm::mat4 model = glm::scale(glm::vec3(1.0f,1.0f,1.0f)*0.3f)*glm::rotate(glm::radians(time*2.5f), glm::vec3(0.0f, 1.0f, 0.0f))*glm::translate(glm::vec3(0,0,0));
+        glm::mat4 modelb = glm::scale(glm::vec3(1.0f,1.0f,1.0f)*0.3f)*glm::rotate(glm::radians(time*-1.0f), glm::vec3(0.0f, 1.0f, 0.0f))*glm::translate(glm::vec3(1,0,0));
         stagingBufferManager.stageBufferData(&model, objectData->getBuffer(), sizeof(glm::mat4x4));
+        stagingBufferManager.stageBufferData(&modelb, objectData->getBuffer(), sizeof(glm::mat4x4), sizeof(glm::mat4x4));
         stagingBufferManager.flush();
 
         voxelizerPass.begin(commandBuffer, imagelessFramebuffer, voxelizerScissor, {});
@@ -316,6 +327,11 @@ int main(int argc, char* argv[]) {
         commandBuffer.bindVertexBuffers(0, {dragon.vertexBuffer->getBuffer()}, {0});
         commandBuffer.bindIndexBuffer(dragon.indexBuffer->getBuffer(), 0, VK_INDEX_TYPE_UINT32);
         commandBuffer.drawIndexed(dragon.indices.size());
+
+        commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerPipelineLayout, 0, {bunnySet, voxelizerDataSet});
+        commandBuffer.bindVertexBuffers(0, {bunny.vertexBuffer->getBuffer()}, {0});
+        commandBuffer.bindIndexBuffer(bunny.indexBuffer->getBuffer(), 0, VK_INDEX_TYPE_UINT32);
+        commandBuffer.drawIndexed(bunny.indices.size());
 
         voxelizerPass.end(commandBuffer);
 

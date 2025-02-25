@@ -24,10 +24,10 @@ void main() {
         gl_Position = vec4((gl_in[i].gl_Position.xyz - data.center)/* / data.resolution.z*/, 1);
 
         if (maxi == 0) {
-            //gl_Position.xyz = gl_Position.zyx;
+            gl_Position.xyz = gl_Position.zyx;
         }
         else if (maxi == 1) {
-            //gl_Position.xyz = gl_Position.xzy;
+            gl_Position.xyz = gl_Position.xzy;
         }
 
         //gl_Position.xy /= data.resolution.xy;
