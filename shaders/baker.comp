@@ -1,0 +1,36 @@
+#version 460
+
+struct Node {
+    int children[8];
+};
+
+struct Voxel {
+    uint position;
+    uint normal;
+    uint color;
+};
+
+layout(std430, set = 1, binding = 0) buffer VoxelCountBuffer {
+    uint voxelCount;
+};
+
+layout(std430, set = 1, binding = 1) buffer VoxelBuffer {
+    Voxel voxels[];
+};
+
+layout(std430, set = 1, binding = 2) buffer NodeCountBuffer {
+    uint nodeCount;
+};
+
+layout(std430, set = 1, binding = 3) buffer NodeBuffer {
+    Node nodes[];
+};
+
+layout(push_constant) uniform VoxelizerData {
+    vec3 center;
+    vec3 resolution; // x: dimensions^3, y: unit length, z: unassigned
+} data;
+
+void main() {
+
+}
