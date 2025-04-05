@@ -2,9 +2,8 @@
 
 Device::Device(VulkanInstance& vulkanInstance, VkPhysicalDeviceFeatures enabledFeatures, std::vector<const char*> deviceExtensions) : vulkanInstance(vulkanInstance) {
     deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-    deviceExtensions.push_back(VK_KHR_MAINTENANCE_4_EXTENSION_NAME);
     deviceExtensions.push_back(VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
-
+    deviceExtensions.push_back(VK_EXT_CONSERVATIVE_RASTERIZATION_EXTENSION_NAME);
     uint32_t ione = 1;
     vkEnumeratePhysicalDevices(vulkanInstance.instance, &ione, &physicalDevice);
 
@@ -53,10 +52,20 @@ Device::Device(VulkanInstance& vulkanInstance, VkPhysicalDeviceFeatures enabledF
 
     VkDeviceQueueCreateInfo queueCreateInfos[3] = {graphicsQueueCreateInfo, computeQueueCreateInfo, transferQueueCreateInfo};
 
-    //Imageless framebuffers
     VkPhysicalDeviceVulkan12Features vulkan12Features{};
     vulkan12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
     vulkan12Features.imagelessFramebuffer = VK_TRUE;
+
+    VkPhysicalDeviceVulkan13Features vulkan13Features{};
+    vulkan13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+    vulkan13Features.maintenance4 = VK_TRUE;
+
+    VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT swapchainMaintenance1Features{};
+    swapchainMaintenance1Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT;
+    swapchainMaintenance1Features.swapchainMaintenance1 = VK_TRUE;
+
+    vulkan12Features.pNext = &vulkan13Features;
+    vulkan13Features.pNext = &swapchainMaintenance1Features;
 
     VkDeviceCreateInfo deviceCreateInfo{};
     deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;

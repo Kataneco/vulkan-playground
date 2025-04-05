@@ -24,6 +24,7 @@ public:
     void bindVertexBuffers(uint32_t firstBinding, const std::vector<VkBuffer> &buffers, const std::vector<VkDeviceSize> &offsets);
     void bindIndexBuffer(VkBuffer buffer, VkDeviceSize offset, VkIndexType indexType);
     void bindDescriptorSets(VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t firstSet, const std::vector<VkDescriptorSet> &descriptorSets, const std::vector<uint32_t> &dynamicOffsets = {});
+    void pushConstants(VkPipelineLayout layout, VkShaderStageFlags stageFlags, VkDeviceSize offset, VkDeviceSize size, void* data);
     void draw(uint32_t vertexCount, uint32_t instanceCount = 1, uint32_t firstVertex = 0, uint32_t firstInstance = 0);
     void drawIndexed(uint32_t indexCount, uint32_t instanceCount = 1, uint32_t firstIndex = 0, int32_t vertexOffset = 0, uint32_t firstInstance = 0);
     void dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ);

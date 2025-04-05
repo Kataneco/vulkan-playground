@@ -77,15 +77,16 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::setViewportState(const VkViewp
     return *this;
 }
 
-GraphicsPipelineBuilder& GraphicsPipelineBuilder::setRasterizationState(VkPolygonMode polygonMode, VkCullModeFlags cullMode, VkFrontFace frontFace) {
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::setRasterizationState(VkPolygonMode polygonMode, VkCullModeFlags cullMode, VkFrontFace frontFace, float lineWidth, void* pNext) {
     rasterizationState.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterizationState.pNext = pNext;
     rasterizationState.depthClampEnable = VK_FALSE;
     rasterizationState.rasterizerDiscardEnable = VK_FALSE;
     rasterizationState.polygonMode = polygonMode;
     rasterizationState.cullMode = cullMode;
     rasterizationState.frontFace = frontFace;
     rasterizationState.depthBiasEnable = VK_FALSE;
-    rasterizationState.lineWidth = 1.0f;
+    rasterizationState.lineWidth = lineWidth;
     return *this;
 }
 
@@ -146,6 +147,13 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::setRenderPass(VkRenderPass pas
     return *this;
 }
 
+/*
+GraphicsPipelineBuilder &GraphicsPipelineBuilder::chain(void *next) {
+    links.push_back(next);
+    return *this;
+}
+*/
+
 VkPipeline GraphicsPipelineBuilder::build(VkDevice device) {
     VkGraphicsPipelineCreateInfo pipelineInfo{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
     pipelineInfo.stageCount = shaderStages.size();
@@ -161,6 +169,15 @@ VkPipeline GraphicsPipelineBuilder::build(VkDevice device) {
     pipelineInfo.layout = pipelineLayout;
     pipelineInfo.renderPass = renderPass;
     pipelineInfo.subpass = subpass;
+
+    /*
+    if (!links.empty()) {
+        pipelineInfo.pNext = links[0];
+        for (size_t i = 1; i < links.size(); ++i) {
+            *reinterpret_cast<void**>(&reinterpret_cast<VkStructureType*>(links[i-1])[1]) = links[i];
+        }
+    }
+    */
 
     VkPipeline pipeline;
     if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline) != VK_SUCCESS) {

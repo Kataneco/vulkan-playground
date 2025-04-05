@@ -11,10 +11,14 @@ layout(set = 0, binding = 0) uniform ObjectData {
     mat4 model;
 } objectData;
 
+layout(push_constant) uniform VoxelizerData {
+    vec3 center;
+    vec3 resolution; // x: dimensions^3, y: unit length, z: unassigned
+} data;
+
 void main() {
     gl_Position = objectData.model*vec4(position, 1);
-    //gl_Position.xyz /= gl_Position.w;
-    //gl_Position.w = 1;
+    gl_Position.xyz -= data.center;
     outNormal = normal;
     outTexCoord = texCoord;
 }

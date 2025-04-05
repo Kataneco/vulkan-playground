@@ -65,6 +65,10 @@ void CommandBuffer::bindDescriptorSets(VkPipelineBindPoint pipelineBindPoint, Vk
     vkCmdBindDescriptorSets(commandBuffer, pipelineBindPoint, layout, firstSet, descriptorSets.size(), descriptorSets.data(), dynamicOffsets.size(), dynamicOffsets.data());
 }
 
+void CommandBuffer::pushConstants(VkPipelineLayout layout, VkShaderStageFlags stageFlags, VkDeviceSize offset, VkDeviceSize size, void *data) {
+    vkCmdPushConstants(commandBuffer, layout, stageFlags, offset, size, data);
+}
+
 void CommandBuffer::draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) {
     vkCmdDraw(commandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
 }

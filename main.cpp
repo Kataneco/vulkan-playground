@@ -10,7 +10,7 @@ int main(int argc, char* argv[]) {
 
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+    //glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
     Window window(width, height);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
@@ -18,7 +18,7 @@ int main(int argc, char* argv[]) {
     const char **glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
     std::vector<const char*> instanceExtensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
     VulkanInstance instance(VK_API_VERSION_1_3, instanceExtensions, true);
-    Device device(instance, {.independentBlend = VK_TRUE, .geometryShader = VK_TRUE, .fillModeNonSolid = VK_TRUE, .samplerAnisotropy = VK_TRUE, .vertexPipelineStoresAndAtomics = VK_TRUE, .fragmentStoresAndAtomics = VK_TRUE}, {});
+    Device device(instance, {.independentBlend = VK_TRUE, .geometryShader = VK_TRUE, .fillModeNonSolid = VK_TRUE, .wideLines = VK_TRUE, .samplerAnisotropy = VK_TRUE, .vertexPipelineStoresAndAtomics = VK_TRUE, .fragmentStoresAndAtomics = VK_TRUE}, {});
 
     DescriptorLayoutCache descriptorLayoutCache(device);
     DescriptorAllocator descriptorAllocator(device);
@@ -93,7 +93,7 @@ int main(int argc, char* argv[]) {
 
     std::vector<Framebuffer> framebuffers;
     framebuffers.reserve(swapchain.getImageCount());
-    for (int i = 0; i < swapchain.getImageCount(); ++i) {
+    for (size_t i = 0; i < swapchain.getImageCount(); ++i) {
         framebuffers.emplace_back(device, renderPass);
         framebuffers.back().create({swapchain.getImageViews()[i], depthImage->getImageView()}, swapchain.getExtent().width, swapchain.getExtent().height);
     }
@@ -116,11 +116,30 @@ int main(int argc, char* argv[]) {
     VkPipeline pipeline = GraphicsPipelineBuilder()
             .setShaders(vertModule, fragModule)
             .setViewportState(viewport, scissor)
-            .setRasterizationState(VK_POLYGON_MODE_LINE, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE)
+            .setRasterizationState(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE, 1.0f)
             .setColorBlendState({noBlend})
             .setDepthStencilState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_LESS)
             .setLayout(pipelineLayout)
             .setRenderPass(renderPass, 0)
+            .setDynamicState({VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR})
+            .build(device);
+
+    //Grid exclusive
+    auto fsqCode = readFile("shaders/fullscreenQuad.vert.spv");
+    auto gridCode = readFile("shaders/grid.frag.spv");
+    ShaderModule fsqModule(device, fsqCode), gridModule(device, gridCode);
+    ShaderReflection fsqShader(fsqCode), gridShader(gridCode);
+    VkPipelineLayout gridPipelineLayout = pipelineLayoutCache.createPipelineLayout(fsqShader+gridShader);
+
+    VkPipeline gridPipeline = GraphicsPipelineBuilder()
+            .setShaders(fsqModule, gridModule)
+            .setViewportState(viewport, scissor)
+            .setRasterizationState(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE)
+            .setColorBlendState({noBlend})
+            .setDepthStencilState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_LESS)
+            .setLayout(gridPipelineLayout)
+            .setRenderPass(renderPass, 0)
+            .setDynamicState({VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR})
             .build(device);
 
     std::vector<Semaphore> swapchainLockSemaphore;
@@ -145,9 +164,9 @@ int main(int argc, char* argv[]) {
     auto objectData = resourceManager.createBuffer({.size = sizeof(glm::mat4x4)*1024, .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT});
 
     auto voxelBuffer = resourceManager.createBuffer({.size = sizeof(Voxel)*1024*1024*2, .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT});
-    //auto svoBuffer = resourceManager.createBuffer({.size = sizeof(OctreeNode)*1024*1024*4, .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT});
+    auto svoBuffer = resourceManager.createBuffer({.size = sizeof(OctreeNode)*1024*1024*4, .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT});
     auto voxelCountBuffer = resourceManager.createBuffer({.size = sizeof(uint64_t), .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT}); //Atomix
-    //auto nodeCountBuffer = resourceManager.createBuffer({.size = sizeof(uint64_t), .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT}); //Atomix
+    auto nodeCountBuffer = resourceManager.createBuffer({.size = sizeof(uint64_t), .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT}); //Atomix
 
     auto voxelDrawIndirectBuffer = resourceManager.createBuffer({.size = sizeof(VkDrawIndirectCommand), .usage = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT});
     VkDrawIndirectCommand drawIndirectCommand{
@@ -159,19 +178,23 @@ int main(int argc, char* argv[]) {
 
     uint64_t zero = 0;
     stagingBufferManager.stageBufferData(&zero, voxelCountBuffer->getBuffer(), sizeof(zero));
-    //stagingBufferManager.stageBufferData(&zero, nodeCountBuffer->getBuffer(), sizeof(zero));
+    stagingBufferManager.stageBufferData(&zero, nodeCountBuffer->getBuffer(), sizeof(zero));
     stagingBufferManager.stageBufferData(&drawIndirectCommand, voxelDrawIndirectBuffer->getBuffer(), sizeof(drawIndirectCommand));
     stagingBufferManager.flush();
 
     VkDescriptorBufferInfo voxelDataSetInfos[] = {
             {voxelCountBuffer->getBuffer(), 0, sizeof(uint32_t)},
-            {voxelBuffer->getBuffer(), 0, VK_WHOLE_SIZE}
+            {voxelBuffer->getBuffer(), 0, VK_WHOLE_SIZE},
+            {nodeCountBuffer->getBuffer(), 0, sizeof(uint32_t)},
+            {svoBuffer->getBuffer(), 0, VK_WHOLE_SIZE}
     };
 
     VkDescriptorSet voxelizerDataSet;
     DescriptorBuilder(descriptorLayoutCache, descriptorAllocator)
             .bind_buffer(0, &voxelDataSetInfos[0], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT)
             .bind_buffer(1, &voxelDataSetInfos[1], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT)
+            .bind_buffer(2, &voxelDataSetInfos[2], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT)
+            .bind_buffer(3, &voxelDataSetInfos[3], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT)
             .build(voxelizerDataSet);
 
     //Object Specific
@@ -213,35 +236,49 @@ int main(int argc, char* argv[]) {
     voxelizerDependency.dstStageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
     voxelizerDependency.dstAccessMask = 0;
 
-    voxelizerPass.create({}, {voxelizerSubpass}, {});
+    VkAttachmentDescription dummyAttachment{};
+    dummyAttachment.format = VK_FORMAT_R8G8B8A8_UNORM;
+    dummyAttachment.samples = VK_SAMPLE_COUNT_4_BIT;
+    dummyAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    dummyAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    dummyAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    voxelizerPass.create({dummyAttachment}, {voxelizerSubpass}, {});
 
     VoxelizerData dragonVoxelizerConstants{
-            {0, 0, 0},
-            {2048, 2048, 1.0f/512.0f}
+            //{0.5, 0.5, 0.5},
+            {1,1,1},
+            {256, 0.5, 0}
     };
 
-    glm::vec4 grid = glm::vec4(dragonVoxelizerConstants.center, dragonVoxelizerConstants.resolution.z);
-
     VkViewport voxelizerViewport{};
-    voxelizerViewport.width = dragonVoxelizerConstants.resolution.x;
-    voxelizerViewport.height = dragonVoxelizerConstants.resolution.y;
+    voxelizerViewport.width = dragonVoxelizerConstants.resolution.x*1.25+2;
+    voxelizerViewport.height = dragonVoxelizerConstants.resolution.x*1.25+2;
     voxelizerViewport.minDepth = 0.0f;
     voxelizerViewport.maxDepth = 1.0f;
 
     VkRect2D voxelizerScissor{};
-    voxelizerScissor.extent = {static_cast<uint32_t>(dragonVoxelizerConstants.resolution.x), static_cast<uint32_t>(dragonVoxelizerConstants.resolution.y)};
+    voxelizerScissor.extent = {static_cast<uint32_t>(dragonVoxelizerConstants.resolution.x*1.25+2), static_cast<uint32_t>(dragonVoxelizerConstants.resolution.x*1.25+2)};
+
+    VkPipelineRasterizationConservativeStateCreateInfoEXT pipelineRasterizationConservativeStateCreateInfo{};
+    pipelineRasterizationConservativeStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT;
+    pipelineRasterizationConservativeStateCreateInfo.conservativeRasterizationMode = VK_CONSERVATIVE_RASTERIZATION_MODE_OVERESTIMATE_EXT;
+    pipelineRasterizationConservativeStateCreateInfo.extraPrimitiveOverestimationSize = 0.0f;
 
     VkPipeline voxelizerPipeline = GraphicsPipelineBuilder()
             .setShaders(voxelVertModule, voxelGeomModule, voxelFragModule)
             .setVertexInputState(Vertex::bindings(), Vertex::attributes())
             .setViewportState(voxelizerViewport, voxelizerScissor)
-            .setRasterizationState(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE)
+            .setRasterizationState(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE, 1.0f, &pipelineRasterizationConservativeStateCreateInfo)
             .setLayout(voxelizerPipelineLayout)
             .setRenderPass(voxelizerPass, 0)
             .build(device);
 
+    auto dummyImage = resourceManager.createImage({.imageType = VK_IMAGE_TYPE_2D, .format = VK_FORMAT_R8G8B8A8_UNORM, .extent = {static_cast<uint32_t>(dragonVoxelizerConstants.resolution.x*1.25+2), static_cast<uint32_t>(dragonVoxelizerConstants.resolution.x*1.25+2), 1}, .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_4_BIT, .tiling = VK_IMAGE_TILING_OPTIMAL, .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT}, {.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, .usage = VMA_MEMORY_USAGE_GPU_ONLY});
+    dummyImage->createImageView({.viewType = VK_IMAGE_VIEW_TYPE_2D, .format = VK_FORMAT_R8G8B8A8_UNORM, .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0,1,0,1}});
+
     Framebuffer imagelessFramebuffer(device, voxelizerPass);
-    imagelessFramebuffer.create({}, dragonVoxelizerConstants.resolution.x, dragonVoxelizerConstants.resolution.y);
+    imagelessFramebuffer.create({dummyImage->getImageView()}, dragonVoxelizerConstants.resolution.x*1.25+2, dragonVoxelizerConstants.resolution.x*1.25+2);
 
     //Main rendering loop
     uint32_t frame = 0;
@@ -254,13 +291,21 @@ int main(int argc, char* argv[]) {
     //Camera
     float sensitivity = 0.1f;
     float lastX = 0.0f, lastY = 0.0f;
-    float speed = 0.75f;
+    float speed = 0.5f;
     float yaw = 0.0f, pitch = 0.0f;
     glm::vec3 camera = {0.0f, 0.0f, -1.0f};
+    bool focus = true;
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
         if (glfwGetWindowAttrib(window, GLFW_ICONIFIED) == GLFW_TRUE) continue; //Pause rendering if minimized
-        if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) break; //Exit button
+        if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            focus = false;
+        } //Exit button //Not really anymore
+        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+            focus = true;
+        }
 
         // Delta time
         currentFrame = glfwGetTime();
@@ -285,8 +330,8 @@ int main(int argc, char* argv[]) {
         lastX = xpos;
         lastY = ypos;
 
-        yaw   += xoffset;
-        pitch += yoffset;
+        yaw   += focus*xoffset;
+        pitch += focus*yoffset;
 
         if(pitch > 89.0f) pitch = 89.0f;
         if(pitch < -89.0f) pitch = -89.0f;
@@ -304,17 +349,24 @@ int main(int argc, char* argv[]) {
         if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) camera.y -= speed*deltaTime;
 
         glm::mat4 view = glm::lookAt(camera, camera+glm::normalize(direction), glm::vec3(0,1,0));
-        glm::mat4 projection = glm::perspective(glm::radians(75.0f), (float)width/(float)height, 0.0001f, 5000.0f);
+        glm::mat4 projection = glm::perspective(glm::radians(90.0f), (float)width/(float)height, 0.01f, 1000.0f);
         projection[1][1] *= -1;
         glm::mat4 unified = projection*view;
 
         commandBuffer.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
         //Experimental
-        glm::mat4 model = glm::scale(glm::vec3(1.0f,1.0f,1.0f)*0.3f)*glm::rotate(glm::radians(time*2.5f), glm::vec3(0.0f, 1.0f, 0.0f))*glm::translate(glm::vec3(0,0,0));
+        if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) dragonVoxelizerConstants.center.y += speed*deltaTime;
+        if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) dragonVoxelizerConstants.center.y -= speed*deltaTime;
+        if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) dragonVoxelizerConstants.center.x -= speed*deltaTime;
+        if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) dragonVoxelizerConstants.center.x += speed*deltaTime;
+        if (glfwGetKey(window, GLFW_KEY_PAGE_UP) == GLFW_PRESS) dragonVoxelizerConstants.center.z += speed*deltaTime;
+        if (glfwGetKey(window, GLFW_KEY_PAGE_DOWN) == GLFW_PRESS) dragonVoxelizerConstants.center.z -= speed*deltaTime;
+
+        glm::mat4 model = glm::scale(glm::vec3(20.0f,20.0f,20.0f)*0.3f)*glm::rotate(glm::radians(time*0.0f), glm::vec3(0.0f, 1.0f, 0.0f))*glm::translate(glm::vec3(0,0,0));
         glm::mat4 modelb = glm::scale(glm::vec3(1.0f,1.0f,1.0f)*0.3f)*glm::rotate(glm::radians(time*-1.0f), glm::vec3(0.0f, 1.0f, 0.0f))*glm::translate(glm::vec3(1,0,0));
-        stagingBufferManager.stageBufferData(&model, objectData->getBuffer(), sizeof(glm::mat4x4));
-        stagingBufferManager.stageBufferData(&modelb, objectData->getBuffer(), sizeof(glm::mat4x4), sizeof(glm::mat4x4));
+        stagingBufferManager.stageBufferData(&model, objectData->getBuffer(), sizeof(glm::mat4));
+        stagingBufferManager.stageBufferData(&modelb, objectData->getBuffer(), sizeof(glm::mat4), sizeof(glm::mat4));
         stagingBufferManager.flush();
 
         voxelizerPass.begin(commandBuffer, imagelessFramebuffer, voxelizerScissor, {});
@@ -322,7 +374,7 @@ int main(int argc, char* argv[]) {
         commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerPipeline);
         commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerPipelineLayout, 0, {dragonSet, voxelizerDataSet});
 
-        vkCmdPushConstants(commandBuffer, voxelizerPipelineLayout, VK_SHADER_STAGE_GEOMETRY_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(dragonVoxelizerConstants), &dragonVoxelizerConstants);
+        vkCmdPushConstants(commandBuffer, voxelizerPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_GEOMETRY_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(dragonVoxelizerConstants), &dragonVoxelizerConstants);
 
         commandBuffer.bindVertexBuffers(0, {dragon.vertexBuffer->getBuffer()}, {0});
         commandBuffer.bindIndexBuffer(dragon.indexBuffer->getBuffer(), 0, VK_INDEX_TYPE_UINT32);
@@ -347,11 +399,26 @@ int main(int argc, char* argv[]) {
 
         renderPass.begin(commandBuffer, framebuffers[frame], scissor, {{.color = {0.0f, 0.0f, 0.0f, 0.0f}}, {.depthStencil = {1.0f, 0}}});
 
+        vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+        vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+        commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, gridPipeline);
+
+        glm::vec4 gridcam(camera, 0), griddata(width, height, 0.01, 1000);
+        glm::mat4 inverse_projection = glm::inverse(projection), inverse_view = glm::inverse(view);
+
+        commandBuffer.pushConstants(gridPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(gridcam), &gridcam);
+        commandBuffer.pushConstants(gridPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(gridcam), sizeof(griddata), &griddata);
+        commandBuffer.pushConstants(gridPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(gridcam)+sizeof(griddata), sizeof(inverse_projection), &inverse_projection);
+        commandBuffer.pushConstants(gridPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(gridcam) + sizeof(griddata) + sizeof(inverse_projection), sizeof(inverse_view), &inverse_view);
+
+        commandBuffer.drawIndexed(6);
+
         commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
         commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, {voxeldisplayDataSet});
 
-        vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(unified), &unified);
-        vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, sizeof(unified), sizeof(grid), &grid);
+        commandBuffer.pushConstants(pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(unified), &unified);
+        commandBuffer.pushConstants(pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, sizeof(unified), sizeof(dragonVoxelizerConstants), &dragonVoxelizerConstants);
 
         vkCmdDrawIndirect(commandBuffer, voxelDrawIndirectBuffer->getBuffer(), 0, 1, sizeof(VkDrawIndirectCommand));
 
@@ -365,14 +432,34 @@ int main(int argc, char* argv[]) {
         vcReset.dstOffset = 0;
         vkCmdCopyBuffer(commandBuffer, voxelCountBuffer->getBuffer(), voxelCountBuffer->getBuffer(), 1, &vcReset);
 
+        vkCmdFillBuffer(commandBuffer, nodeCountBuffer->getBuffer(), 0, VK_WHOLE_SIZE, 1);
+        vkCmdFillBuffer(commandBuffer, svoBuffer->getBuffer(), 0, VK_WHOLE_SIZE, 0);
+
         commandBuffer.end();
 
         commandBuffer.submit(device.getGraphicsQueue(), {swapchainLockSemaphore[frame]}, {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT}, {renderLockSemaphore[frame]}, frameLockFence[frame]);
 
         if (swapchain.present(swapchainIndex, renderLockSemaphore[frame]) == 1) {
             device.waitIdle();
-            //glfwGetFramebufferSize(window, &width, &height);
-               //death
+            glfwGetFramebufferSize(window, &width, &height);
+            swapchain.create(width, height);
+            framebuffers.clear();
+            framebuffers.reserve(swapchain.getImageCount());
+
+            //depth bullshit
+            depthImageCreateInfo.extent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1};
+            depthImage = resourceManager.createImage(depthImageCreateInfo, {.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, .usage = VMA_MEMORY_USAGE_GPU_ONLY});
+            depthImageViewCreateInfo.image = depthImage->getImage();
+            depthImage->createImageView(depthImageViewCreateInfo);
+
+            for (int i = 0; i < swapchain.getImageCount(); ++i) {
+                framebuffers.emplace_back(device, renderPass);
+                framebuffers.back().create({swapchain.getImageViews()[i], depthImage->getImageView()}, swapchain.getExtent().width, swapchain.getExtent().height);
+            }
+
+            viewport.width = static_cast<float>(swapchain.getExtent().width);
+            viewport.height = static_cast<float>(swapchain.getExtent().height);
+            scissor.extent = swapchain.getExtent();
         }
 
         frame = (frame + 1) % swapchain.getImageCount(); //Jump to next frame
@@ -380,6 +467,7 @@ int main(int argc, char* argv[]) {
 
     device.waitIdle();
 
+    vkDestroyPipeline(device, gridPipeline, nullptr);
     vkDestroyPipeline(device, voxelizerPipeline, nullptr);
     vkDestroyPipeline(device, pipeline, nullptr);
     swapchain.destroy();

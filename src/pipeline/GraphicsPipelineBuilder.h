@@ -1,6 +1,8 @@
 #pragma once
 #include "util/VulkanUtils.h"
 
+//TODO: Add pNext for other stuff or automate extension info chaining
+
 class GraphicsPipelineBuilder {
 public:
     GraphicsPipelineBuilder &setShaders(VkShaderModule vertShader, VkShaderModule fragShader);
@@ -8,7 +10,7 @@ public:
     GraphicsPipelineBuilder &setVertexInputState(const std::vector<VkVertexInputBindingDescription> &bindingDescs, const std::vector<VkVertexInputAttributeDescription> &attributeDescs);
     GraphicsPipelineBuilder &setInputAssemblyState(VkPrimitiveTopology topology, VkBool32 primitiveRestartEnable = VK_FALSE);
     GraphicsPipelineBuilder &setViewportState(const VkViewport &viewport, const VkRect2D &scissor);
-    GraphicsPipelineBuilder &setRasterizationState(VkPolygonMode polygonMode, VkCullModeFlags cullMode, VkFrontFace frontFace);
+    GraphicsPipelineBuilder &setRasterizationState(VkPolygonMode polygonMode, VkCullModeFlags cullMode, VkFrontFace frontFace, float lineWidth = 1.0f, void* pNext = nullptr);
     GraphicsPipelineBuilder &setMultisampleState(VkSampleCountFlagBits samples);
     GraphicsPipelineBuilder &setDepthStencilState(VkBool32 depthTestEnable, VkBool32 depthWriteEnable, VkCompareOp depthCompareOp);
     GraphicsPipelineBuilder &setColorBlendState(const VkPipelineColorBlendAttachmentState &colorBlendAttachment);
@@ -16,6 +18,8 @@ public:
     GraphicsPipelineBuilder &setDynamicState(const std::vector<VkDynamicState> &dynamicStates);
     GraphicsPipelineBuilder &setLayout(VkPipelineLayout layout);
     GraphicsPipelineBuilder &setRenderPass(VkRenderPass renderPass, uint32_t subpass);
+
+    //GraphicsPipelineBuilder &chain(void* next);
 
     VkPipeline build(VkDevice device);
 
@@ -43,4 +47,6 @@ private:
     std::vector<VkDynamicState> dynamicStates;
     VkViewport viewport{};
     VkRect2D scissor{};
+
+    //std::vector<void*> links;
 };
