@@ -21,7 +21,7 @@ const int CUBE_INDICES[36] = int[36](
 );
 
 struct Voxel {
-    vec3 position;
+    uint position;
     uint normal;
     uint color;
 };
@@ -32,7 +32,8 @@ layout(std430, set = 0, binding = 0) readonly buffer VoxelBuffer {
 
 layout(push_constant) uniform VoxelDisplayData {
     mat4 proj;
-    vec4 grid; //xyz: center, w: voxel size
+    vec3 center;
+    vec3 resolution;
 } data;
 
 layout(location = 0) out vec4 outColor;
@@ -44,8 +45,8 @@ void main() {
 
     Voxel voxel = voxels[gl_InstanceIndex];
 
-    vec3 worldPosition = (localPosition * data.grid.w) + voxel.position;
-    worldPosition += data.grid.xyz;
+    vec3 worldPosition = (localPosition * (data.resolution.y/data.resolution.x)*(4+0.1f)) + unpackSnorm4x8(voxel.position).xyz;
+    worldPosition += data.center;
 
     gl_Position = data.proj * vec4(worldPosition, 1);
     outColor = unpackUnorm4x8(voxel.color);
