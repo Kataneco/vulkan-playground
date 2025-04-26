@@ -360,10 +360,10 @@ int main(int argc, char* argv[]) {
         if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) dragonVoxelizerConstants.center.y -= speed*deltaTime;
         if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) dragonVoxelizerConstants.center.x -= speed*deltaTime;
         if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) dragonVoxelizerConstants.center.x += speed*deltaTime;
-        if (glfwGetKey(window, GLFW_KEY_PAGE_UP) == GLFW_PRESS) dragonVoxelizerConstants.center.z += speed*deltaTime;
-        if (glfwGetKey(window, GLFW_KEY_PAGE_DOWN) == GLFW_PRESS) dragonVoxelizerConstants.center.z -= speed*deltaTime;
+        if (glfwGetKey(window, GLFW_KEY_Z) == GLFW_PRESS) dragonVoxelizerConstants.center.z += speed*deltaTime;
+        if (glfwGetKey(window, GLFW_KEY_X) == GLFW_PRESS) dragonVoxelizerConstants.center.z -= speed*deltaTime;
 
-        glm::mat4 model = glm::scale(glm::vec3(20.0f,20.0f,20.0f)*0.3f)*glm::rotate(glm::radians(time*0.0f), glm::vec3(0.0f, 1.0f, 0.0f))*glm::translate(glm::vec3(0,0,0));
+        glm::mat4 model = glm::scale(glm::vec3(2.0f,2.0f,2.0f))*glm::rotate(glm::radians(time*0.0f), glm::vec3(0.0f, 1.0f, 0.0f))*glm::translate(glm::vec3(0,0,0));
         glm::mat4 modelb = glm::scale(glm::vec3(1.0f,1.0f,1.0f)*0.3f)*glm::rotate(glm::radians(time*-1.0f), glm::vec3(0.0f, 1.0f, 0.0f))*glm::translate(glm::vec3(1,0,0));
         stagingBufferManager.stageBufferData(&model, objectData->getBuffer(), sizeof(glm::mat4));
         stagingBufferManager.stageBufferData(&modelb, objectData->getBuffer(), sizeof(glm::mat4), sizeof(glm::mat4));

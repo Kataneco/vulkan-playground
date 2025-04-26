@@ -48,6 +48,8 @@ void main() {
     vec3 worldPosition = (localPosition * (data.resolution.y/data.resolution.x)*(4+0.1f)) + unpackSnorm4x8(voxel.position).xyz;
     worldPosition += data.center;
 
+    worldPosition += unpackSnorm4x8(voxel.normal).xyz*0.005f;
+
     gl_Position = data.proj * vec4(worldPosition, 1);
     outColor = unpackUnorm4x8(voxel.color);
     outNormal = unpackSnorm4x8(voxel.normal).xyz;
