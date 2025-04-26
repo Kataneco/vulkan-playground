@@ -67,16 +67,21 @@ int findOrCreateVoxel(ivec3 voxelPos, uint depth, uint maxDepth) {
             // Link this new node to the parent
             int newNodePtr = int(newNodeIndex); // Positive for branch nodes
 
-            nodes[nodeIndex].children[childIdx] = newNodePtr;
-            childPtr = newNodePtr;
+            // Use atomic operation to avoid race conditions when multiple threads try to create the same node
+            atomicCompSwap(nodes[nodeIndex].children[childIdx], 0, newNodePtr);
+
+            // Re-read the pointer - if our atomic swap worked, it'll be our new node
+            // If another thread beat us to it, we'll get their node instead
+            childPtr = nodes[nodeIndex].children[childIdx];
         }
 
         // If it's a negative pointer, we've already hit a leaf node
+        // This is a "shortcut" - we found a leaf earlier than expected depth
         if (childPtr < 0) {
             return childPtr; // Leaf node already exists
         }
 
-        // Move to the child node (subtract 1 because indices are 1-based for branch nodes)
+        // Move to the child node
         nodeIndex = childPtr;
     }
 
@@ -106,10 +111,12 @@ int findOrCreateVoxel(ivec3 voxelPos, uint depth, uint maxDepth) {
         // We use (voxelIndex + 1) to make sure even index 0 becomes negative when negated
         int newLeafPtr = -int(voxelIndex + 1);
 
-        // Link to parent
-        nodes[nodeIndex].children[childIdx] = newLeafPtr;
+        // Use atomic operation to ensure we don't have race conditions
+        int result = atomicCompSwap(nodes[nodeIndex].children[childIdx], 0, newLeafPtr);
 
-        return newLeafPtr;
+        // If result is 0, our swap worked - return the new leaf
+        // If result is not 0, another thread beat us - return their leaf
+        return (result == 0) ? newLeafPtr : nodes[nodeIndex].children[childIdx];
     }
 
     // If branch node exists at this position but we need a leaf,
@@ -152,30 +159,31 @@ void main() {
 
     // Find or create the voxel in the octree
     // Parameters: voxelPos, current depth, max depth
-    int voxelPtr = findOrCreateVoxel(voxelPos, int(log2(data.resolution.x)), int(log2(256))); // Example depth values
+    int voxelPtr = findOrCreateVoxel(voxelPos, uint(log2(data.resolution.x)), uint(log2(256))); // Example depth values
 
     // If voxel pointer is negative, we have a valid leaf node
     if (voxelPtr < 0) {
         // Convert back to voxel index
         uint voxelIndex = uint(-voxelPtr - 1);
         // For a new voxel, set the position directly
-        // Note: Position typically shouldn't be mixed as it defines the voxel's location
-        uint positionPacked = packSnorm4x8(vec4(voxelPos, 0) / data.resolution.x);
+        uint positionPacked = packSnorm4x8(vec4(voxelPos, 1) / 256.0);  // Using explicit scale factor for consistency
 
-        // For existing voxels, mix the normal and color with previous values
-        // Check if this is a new voxel by seeing if position is 0 (assuming 0 is never a valid packed position)
+        // Check if this is a new voxel by seeing if position is 0
         bool isNewVoxel = bool(voxels[voxelIndex].position == 0);
 
         if (isNewVoxel) {
             // New voxel - set initial values
-            voxels[voxelIndex].position = positionPacked;
-            voxels[voxelIndex].normal = packSnorm4x8(vec4(normal, 1));
-            voxels[voxelIndex].color = packUnorm4x8(vec4(1, 1, 1, 1));
+            // Use atomic to prevent race conditions when setting initial values
+            atomicExchange(voxels[voxelIndex].position, positionPacked);
+            atomicExchange(voxels[voxelIndex].normal, packSnorm4x8(vec4(normal, 1)));
+            atomicExchange(voxels[voxelIndex].color, packUnorm4x8(vec4(1, 1, 1, 1)));
         } else {
             // Existing voxel - mix with previous values
-            // Position remains the same
-            voxels[voxelIndex].normal = mixNormal(voxels[voxelIndex].normal, normal);
-            voxels[voxelIndex].color = mixColor(voxels[voxelIndex].color, vec4(1, 1, 1, 1));
+            // Normal update
+            uint oldNormal = atomicExchange(voxels[voxelIndex].normal, mixNormal(voxels[voxelIndex].normal, normal));
+
+            // Color update
+            uint oldColor = atomicExchange(voxels[voxelIndex].color, mixColor(voxels[voxelIndex].color, vec4(1, 1, 1, 1)));
         }
     }
 }

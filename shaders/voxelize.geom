@@ -32,7 +32,7 @@ void main() {
     maxi = facenormal[2] > facenormal[maxi] ? 2 : maxi;
 
     for (uint i = 0; i < 3; i++) {
-        gl_Position = vec4((gl_in[i].gl_Position.xyz)/*+offsets[i]*0*/, 1);
+        gl_Position = vec4((gl_in[i].gl_Position.xyz/*-data.center*/)/*+offsets[i]*0*/, 1);
 
         if (maxi == 0) {
             gl_Position.xyz = gl_Position.zyx;
