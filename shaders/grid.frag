@@ -48,8 +48,8 @@ void main() {
             vec3 pos = camera.position.xyz + (d*t);
             if (abs(fract(pos.x)) < thickness || abs(fract(pos.y)) < thickness) {
                 outColor.x = 1;
-                //gl_FragDepth = linearDepthToNonLinear(t, camera.data.z, camera.data.w);
-                gl_FragDepth = 0.0f;
+                gl_FragDepth = linearDepthToNonLinear(t, camera.data.z, camera.data.w);
+                //gl_FragDepth = 0.0f;
             }
         }
     }
@@ -60,8 +60,8 @@ void main() {
             vec3 pos = camera.position.xyz+(d*t);
             if (abs(fract(pos.x)) < thickness || abs(fract(pos.z)) < thickness) {
                 outColor.y = 1;
-                //gl_FragDepth = linearDepthToNonLinear(t, camera.data.z, camera.data.w);
-                gl_FragDepth = 0.0f;
+                gl_FragDepth = linearDepthToNonLinear(t, camera.data.z, camera.data.w);
+                //gl_FragDepth = 0.0f;
             }
         }
     }
@@ -72,8 +72,8 @@ void main() {
             vec3 pos = camera.position.xyz+(d*t);
             if (abs(fract(pos.z)) < thickness || abs(fract(pos.y)) < thickness) {
                 outColor.z = 1;
-                //gl_FragDepth = linearDepthToNonLinear(t, camera.data.z, camera.data.w);
-                gl_FragDepth = 0.0f;
+                gl_FragDepth = linearDepthToNonLinear(t, camera.data.z, camera.data.w);
+                //gl_FragDepth = 0.0f;
             }
         }
     }

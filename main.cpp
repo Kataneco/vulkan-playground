@@ -8,8 +8,7 @@ int main(int argc, char* argv[]) {
 
     int width = 1600, height = 900;
 
-    glfwInit();
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    Window::initialize();
     //glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
     Window window(width, height);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
@@ -120,24 +119,6 @@ int main(int argc, char* argv[]) {
             .setColorBlendState({noBlend})
             .setDepthStencilState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_LESS)
             .setLayout(pipelineLayout)
-            .setRenderPass(renderPass, 0)
-            .setDynamicState({VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR})
-            .build(device);
-
-    //Grid exclusive
-    auto fsqCode = readFile("shaders/fullscreenQuad.vert.spv");
-    auto gridCode = readFile("shaders/grid.frag.spv");
-    ShaderModule fsqModule(device, fsqCode), gridModule(device, gridCode);
-    ShaderReflection fsqShader(fsqCode), gridShader(gridCode);
-    VkPipelineLayout gridPipelineLayout = pipelineLayoutCache.createPipelineLayout(fsqShader+gridShader);
-
-    VkPipeline gridPipeline = GraphicsPipelineBuilder()
-            .setShaders(fsqModule, gridModule)
-            .setViewportState(viewport, scissor)
-            .setRasterizationState(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE)
-            .setColorBlendState({noBlend})
-            .setDepthStencilState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_LESS)
-            .setLayout(gridPipelineLayout)
             .setRenderPass(renderPass, 0)
             .setDynamicState({VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR})
             .build(device);
@@ -261,7 +242,6 @@ int main(int argc, char* argv[]) {
 
     VkRect2D voxelizerScissor{};
     voxelizerScissor.extent = {static_cast<uint32_t>(dragonVoxelizerConstants.resolution.x+2), static_cast<uint32_t>(dragonVoxelizerConstants.resolution.x+2)};
-    //voxelizerScissor.offset = {1,1};
 
     VkPipelineRasterizationConservativeStateCreateInfoEXT pipelineRasterizationConservativeStateCreateInfo{};
     pipelineRasterizationConservativeStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT;
@@ -366,7 +346,7 @@ int main(int argc, char* argv[]) {
         if (glfwGetKey(window, GLFW_KEY_Z) == GLFW_PRESS) dragonVoxelizerConstants.center.z += speed*deltaTime;
         if (glfwGetKey(window, GLFW_KEY_X) == GLFW_PRESS) dragonVoxelizerConstants.center.z -= speed*deltaTime;
 
-        glm::mat4 model = glm::scale(glm::vec3(2.0f,2.0f,2.0f))*glm::rotate(glm::radians(time*0.0f), glm::vec3(0.0f, 1.0f, 0.0f))*glm::translate(glm::vec3(0,0,0));
+        glm::mat4 model = glm::scale(glm::vec3(1.0f,1.0f,1.0f))*glm::rotate(glm::radians(time*0.0f), glm::vec3(0.0f, 1.0f, 0.0f))*glm::translate(glm::vec3(0,0,0));
         glm::mat4 modelb = glm::scale(glm::vec3(1.0f,1.0f,1.0f)*0.3f)*glm::rotate(glm::radians(time*-1.0f), glm::vec3(0.0f, 1.0f, 0.0f))*glm::translate(glm::vec3(1,0,0));
         stagingBufferManager.stageBufferData(&model, objectData->getBuffer(), sizeof(glm::mat4));
         stagingBufferManager.stageBufferData(&modelb, objectData->getBuffer(), sizeof(glm::mat4), sizeof(glm::mat4));
@@ -404,18 +384,6 @@ int main(int argc, char* argv[]) {
 
         vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
-
-        commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, gridPipeline);
-
-        glm::vec4 gridcam(camera, 0), griddata(width, height, 0.01, 1000);
-        glm::mat4 inverse_projection = glm::inverse(projection), inverse_view = glm::inverse(view);
-
-        commandBuffer.pushConstants(gridPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(gridcam), &gridcam);
-        commandBuffer.pushConstants(gridPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(gridcam), sizeof(griddata), &griddata);
-        commandBuffer.pushConstants(gridPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(gridcam)+sizeof(griddata), sizeof(inverse_projection), &inverse_projection);
-        commandBuffer.pushConstants(gridPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(gridcam) + sizeof(griddata) + sizeof(inverse_projection), sizeof(inverse_view), &inverse_view);
-
-        commandBuffer.drawIndexed(6);
 
         commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
         commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, {voxeldisplayDataSet});
@@ -466,11 +434,10 @@ int main(int argc, char* argv[]) {
 
     device.waitIdle();
 
-    vkDestroyPipeline(device, gridPipeline, nullptr);
     vkDestroyPipeline(device, voxelizerPipeline, nullptr);
     vkDestroyPipeline(device, pipeline, nullptr);
     swapchain.destroy();
     vkDestroySurfaceKHR(instance, surface, nullptr);
-    glfwTerminate();
+    Window::terminate();
     return 0;
 }
