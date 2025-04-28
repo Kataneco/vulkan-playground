@@ -1,4 +1,5 @@
 #version 460
+precision highp int;
 
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
@@ -32,158 +33,153 @@ layout(std430, set = 1, binding = 3) buffer NodeBuffer {
 
 layout(push_constant) uniform VoxelizerData {
     vec3 center;
-    vec3 resolution; // x: dimensions^3, y: unit length, z: unassigned
+    vec3 resolution; // x: dimensions^3, y: unit length, z: unused
 } data;
 
-// Find or create a leaf node for the given voxel position
-// Returns negative index for leaf nodes
-int findOrCreateVoxel(ivec3 voxelPos, uint depth, uint maxDepth) {
-    // Start from root node at index 0
+int findOrCreateVoxel(ivec3 voxelPosition, uint depth, uint maxDepth) {
     int nodeIndex = 0;
 
-    // Maximum depth check to prevent infinite loops
-    for (uint currentDepth = 0; currentDepth < maxDepth; currentDepth++) {
-        // Exit if we've reached the desired depth
-        if (currentDepth == depth) {
-            break;
-        }
-
-        // Calculate which octant the voxel position falls into
-        uint childIdx = 0;
+    for (uint currentDepth = 0; currentDepth < depth; ++currentDepth) {
         uint shift = maxDepth - currentDepth - 1;
+        uint childIndex = 0;
+        if (((voxelPosition.x >> shift) & 1) != 0) childIndex |= 1;
+        if (((voxelPosition.y >> shift) & 1) != 0) childIndex |= 2;
+        if (((voxelPosition.z >> shift) & 1) != 0) childIndex |= 4;
 
-        if (((voxelPos.x >> shift) & 1)==1) childIdx |= 1; // x1 vs x0
-        if (((voxelPos.y >> shift) & 1)==1) childIdx |= 2; // y1 vs y0
-        if (((voxelPos.z >> shift) & 1)==1) childIdx |= 4; // z1 vs z0
+        int childPointer = atomicAdd(nodes[nodeIndex].children[childIndex], 0);
 
-        // Get the child pointer for this position
-        int childPtr = nodes[nodeIndex].children[childIdx];
-
-        // If pointer is 0, create a new node
-        if (childPtr == 0) {
-            // Allocate a new node
-            uint newNodeIndex = atomicAdd(nodeCount, 1);
-
-            // Link this new node to the parent
-            int newNodePtr = int(newNodeIndex); // Positive for branch nodes
-
-            // Use atomic operation to avoid race conditions when multiple threads try to create the same node
-            atomicCompSwap(nodes[nodeIndex].children[childIdx], 0, newNodePtr);
-
-            // Re-read the pointer - if our atomic swap worked, it'll be our new node
-            // If another thread beat us to it, we'll get their node instead
-            childPtr = nodes[nodeIndex].children[childIdx];
+        if (childPointer == 0) {
+            int prior = atomicCompSwap(nodes[nodeIndex].children[childIndex], 0, 2147483647);
+            if (prior == 0) {
+                uint newNodeIndex = atomicAdd(nodeCount, 1);
+                atomicCompSwap(nodes[nodeIndex].children[childIndex], 2147483647, int(newNodeIndex));
+            }
         }
 
-        // If it's a negative pointer, we've already hit a leaf node
-        // This is a "shortcut" - we found a leaf earlier than expected depth
-        if (childPtr < 0) {
-            return childPtr; // Leaf node already exists
-        }
+        do {
+            childPointer = atomicAdd(nodes[nodeIndex].children[childIndex], 0);
+        } while (childPointer == 2147483647);
 
-        // Move to the child node
-        nodeIndex = childPtr;
+        if (childPointer < 0)
+        return childPointer;
+
+        nodeIndex = childPointer;
     }
 
-    // We're at the correct depth, add a leaf for this position
-    uint childIdx = 0;
     uint shift = maxDepth - depth;
+    uint childIndex = 0;
+    if (((voxelPosition.x >> shift) & 1) != 0) childIndex |= 1;
+    if (((voxelPosition.y >> shift) & 1) != 0) childIndex |= 2;
+    if (((voxelPosition.z >> shift) & 1) != 0) childIndex |= 4;
 
-    if (((voxelPos.x >> shift) & 1)==1) childIdx |= 1;
-    if (((voxelPos.y >> shift) & 1)==1) childIdx |= 2;
-    if (((voxelPos.z >> shift) & 1)==1) childIdx |= 4;
+    int childPointer = atomicAdd(nodes[nodeIndex].children[childIndex], 0);
 
-    // Get the existing pointer for this position
-    int leafPtr = nodes[nodeIndex].children[childIdx];
-
-    // If already a leaf, return its index
-    if (leafPtr < 0) {
-        return leafPtr;
+    if (childPointer == 0) {
+        int prior = atomicCompSwap(nodes[nodeIndex].children[childIndex], 0, 2147483647);
+        if (prior == 0) {
+            uint voxelIndex = atomicAdd(voxelCount, 1);
+            voxels[voxelIndex].position = 0;
+            int newLeafPointer = -int(voxelIndex + 1);
+            atomicCompSwap(nodes[nodeIndex].children[childIndex], 2147483647, newLeafPointer);
+        }
     }
 
-    // If 0, create a new leaf index and link it
-    if (leafPtr == 0) {
-        // Add a new voxel
-        uint voxelIndex = atomicAdd(voxelCount, 1);
-        voxels[voxelIndex].position = 0;
+    do {
+        childPointer = atomicAdd(nodes[nodeIndex].children[childIndex], 0);
+    } while (childPointer == 2147483647);
 
-        // Store leaf index as negative (to mark as leaf)
-        // We use (voxelIndex + 1) to make sure even index 0 becomes negative when negated
-        int newLeafPtr = -int(voxelIndex + 1);
-
-        // Use atomic operation to ensure we don't have race conditions
-        int result = atomicCompSwap(nodes[nodeIndex].children[childIdx], 0, newLeafPtr);
-
-        // If result is 0, our swap worked - return the new leaf
-        // If result is not 0, another thread beat us - return their leaf
-        return (result == 0) ? newLeafPtr : nodes[nodeIndex].children[childIdx];
-    }
-
-    // If branch node exists at this position but we need a leaf,
-    // we'd need to handle this case (not implemented here)
-    return 0;
+    return childPointer;
 }
 
-// Helper function to unpack, mix, and repack normal data
 uint mixNormal(uint existingPacked, vec3 newNormal) {
-    // Unpack existing normal
-    vec4 existingNormalVec = unpackSnorm4x8(existingPacked);
-    vec3 existingNormal = existingNormalVec.xyz;
-
-    // Mix normals and normalize
-    vec3 mixedNormal = normalize(existingNormal+newNormal);
-
-    // Repack and return
-    return packSnorm4x8(vec4(mixedNormal, existingNormalVec.w));
+    vec3 existingNormal = unpackSnorm4x8(existingPacked).xyz;
+    vec3 combinedNormal = normalize(existingNormal + newNormal);
+    return packSnorm4x8(vec4(combinedNormal, 1.0));
 }
 
-// Helper function to unpack, mix, and repack color data
 uint mixColor(uint existingPacked, vec4 newColor) {
-    // Unpack existing color
     vec4 existingColor = unpackUnorm4x8(existingPacked);
+    vec4 blendedColor = mix(existingColor, newColor, 0.5);
+    return packUnorm4x8(blendedColor);
+}
 
-    // Mix colors
-    vec4 mixedColor = mix(existingColor, newColor, 0.5f);
+// Splits a 10-bit integer (value) so that its bits are separated by 2 zeros
+uint splitBy3(uint value) {
+    // Insert 2 zeros after each bit of the original value
+    value = (value | (value << 16)) & 0x030000FF;
+    value = (value | (value << 8)) & 0x0300F00F;
+    value = (value | (value << 4)) & 0x030C30C3;
+    value = (value | (value << 2)) & 0x09249249;
+    return value;
+}
 
-    // Repack and return
-    return packUnorm4x8(mixedColor);
+// Morton encode for 3D coordinates - each coordinate can use 10 bits (0-1023 range)
+uint mortonEncode(in uvec3 position) {
+    // Ensure coordinates don't exceed 10 bits (0-1023)
+    position = min(position, uvec3(1023));
+
+    // Interleave bits
+    uint x = splitBy3(position.x);
+    uint y = splitBy3(position.y);
+    uint z = splitBy3(position.z);
+
+    // Combine the interleaved bits
+    return x | (y << 1) | (z << 2);
+}
+
+// Extract every third bit and compact
+uint compactBits(uint value) {
+    // Extract every third bit and compact them
+    value &= 0x09249249;
+    value = (value | (value >> 2)) & 0x030C30C3;
+    value = (value | (value >> 4)) & 0x0300F00F;
+    value = (value | (value >> 8)) & 0x030000FF;
+    value = (value | (value >> 16)) & 0x000003FF;
+    return value;
+}
+
+// Morton decode to get 3D coordinates back
+uvec3 mortonDecode(in uint morton) {
+    uvec3 position;
+
+    // Extract the interleaved bits
+    position.x = compactBits(morton);
+    position.y = compactBits(morton >> 1);
+    position.z = compactBits(morton >> 2);
+
+    return position;
 }
 
 void main() {
-    // Calculate voxel position from vertex position
-    ivec3 voxelPos = ivec3(floor(position-data.center + vec3(sign(position.x)*0.5f, sign(position.y)*0.5f, sign(position.z)*0.5f)));
+    ivec3 voxelPosition = ivec3(floor(position / data.resolution.y + 0.5));
 
-    if(abs(voxelPos.x) > 256) discard;
-    else if(abs(voxelPos.y) > 256) discard;
-    else if(abs(voxelPos.z) > 256) discard;
+    if (any(lessThan(voxelPosition, ivec3(0))) || any(greaterThanEqual(voxelPosition, ivec3(int(data.resolution.x))))) discard;
 
-    // Find or create the voxel in the octree
-    // Parameters: voxelPos, current depth, max depth
-    int voxelPtr = findOrCreateVoxel(voxelPos, uint(log2(data.resolution.x)), uint(log2(256))); // Example depth values
+    uint depth = uint(log2(data.resolution.x));
+    int voxelPointer = findOrCreateVoxel(voxelPosition, depth, depth);
 
-    // If voxel pointer is negative, we have a valid leaf node
-    if (voxelPtr < 0) {
-        // Convert back to voxel index
-        uint voxelIndex = uint(-voxelPtr - 1);
-        // For a new voxel, set the position directly
-        uint positionPacked = packSnorm4x8(vec4(voxelPos, 1) / 256.0);  // Using explicit scale factor for consistency
+    if (voxelPointer < 0) {
+        uint voxelIndex = uint(-voxelPointer - 1);
+        uint positionPacked = mortonEncode(voxelPosition);
+        positionPacked |= 1u << 31;
 
-        // Check if this is a new voxel by seeing if position is 0
-        bool isNewVoxel = bool(voxels[voxelIndex].position == 0);
+        uint expected = 0;
+        bool isNewVoxel = bool(atomicCompSwap(voxels[voxelIndex].position, expected, positionPacked) == 0);
 
         if (isNewVoxel) {
-            // New voxel - set initial values
-            // Use atomic to prevent race conditions when setting initial values
-            atomicExchange(voxels[voxelIndex].position, positionPacked);
-            atomicExchange(voxels[voxelIndex].normal, packSnorm4x8(vec4(normal, 1)));
-            atomicExchange(voxels[voxelIndex].color, packUnorm4x8(vec4(1, 1, 1, 1)));
+            atomicExchange(voxels[voxelIndex].normal, packSnorm4x8(vec4(normalize(normal), 1.0)));
+            atomicExchange(voxels[voxelIndex].color, packUnorm4x8(vec4(1.0, 1.0, 1.0, 1.0)));
         } else {
-            // Existing voxel - mix with previous values
-            // Normal update
-            uint oldNormal = atomicExchange(voxels[voxelIndex].normal, mixNormal(voxels[voxelIndex].normal, normal));
+            /*
+            uint oldNormalPacked = atomicAdd(voxels[voxelIndex].normal, 0);
+            uint oldColorPacked = atomicAdd(voxels[voxelIndex].color, 0);
 
-            // Color update
-            uint oldColor = atomicExchange(voxels[voxelIndex].color, mixColor(voxels[voxelIndex].color, vec4(1, 1, 1, 1)));
+            uint newNormalPacked = mixNormal(oldNormalPacked, normalize(normal));
+            uint newColorPacked = mixColor(oldColorPacked, vec4(1.0, 1.0, 1.0, 1.0));
+
+            atomicExchange(voxels[voxelIndex].normal, newNormalPacked);
+            atomicExchange(voxels[voxelIndex].color, newColorPacked);
+            */
         }
     }
 }

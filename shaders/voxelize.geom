@@ -16,23 +16,16 @@ layout(push_constant) uniform VoxelizerData {
 } data;
 
 void main() {
-    //vec3 facenormal = abs(vec3(normals[0] + normals[1] + normals[2]));
-
     vec3 u = gl_in[1].gl_Position.xyz-gl_in[0].gl_Position.xyz;
     vec3 v = gl_in[2].gl_Position.xyz-gl_in[0].gl_Position.xyz;
     //vec3 w = gl_in[2].gl_Position.xyz-gl_in[1].gl_Position.xyz;
     vec3 facenormal = abs(cross(u, v));
-/*
-    vec3 offsets[3];
-    offsets[0] = -u-v;
-    offsets[1] = u-w;
-    offsets[2] = v+w;
-*/
+
     uint maxi = facenormal[1] > facenormal[0] ? 1 : 0;
     maxi = facenormal[2] > facenormal[maxi] ? 2 : maxi;
 
     for (uint i = 0; i < 3; i++) {
-        gl_Position = vec4((gl_in[i].gl_Position.xyz/*-data.center*/)/*+offsets[i]*0*/, 1);
+        gl_Position = vec4(((gl_in[i].gl_Position.xyz)-data.center)/(data.resolution.y/2), 1.0f);
 
         if (maxi == 0) {
             gl_Position.xyz = gl_Position.zyx;
@@ -41,9 +34,9 @@ void main() {
             gl_Position.xyz = gl_Position.xzy;
         }
 
-        //gl_Position.xy *= data.resolution.xy;
-        gl_Position.z = 1.0f;
-        outPosition = gl_in[i].gl_Position.xyz*data.resolution.x;
+        gl_Position.z = abs(gl_Position.z);
+        //gl_Position.z = 1.0f;
+        outPosition = ((gl_in[i].gl_Position.xyz-data.center)+(vec3(data.resolution.y/2)))*data.resolution.x-1;
         outNormal = normals[i];
         outTexCoord = texCoords[i];
         EmitVertex();

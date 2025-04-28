@@ -163,8 +163,8 @@ int main(int argc, char* argv[]) {
 
     auto objectData = resourceManager.createBuffer({.size = sizeof(glm::mat4x4)*1024, .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT});
 
-    auto voxelBuffer = resourceManager.createBuffer({.size = sizeof(Voxel)*1024*1024*2, .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT});
-    auto svoBuffer = resourceManager.createBuffer({.size = sizeof(OctreeNode)*1024*1024*4, .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT});
+    auto voxelBuffer = resourceManager.createBuffer({.size = sizeof(Voxel)*1024*1024*6, .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT});
+    auto svoBuffer = resourceManager.createBuffer({.size = sizeof(OctreeNode)*1024*1024*6, .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT});
     auto voxelCountBuffer = resourceManager.createBuffer({.size = sizeof(uint64_t), .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT}); //Atomix
     auto nodeCountBuffer = resourceManager.createBuffer({.size = sizeof(uint64_t), .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT}); //Atomix
 
@@ -177,8 +177,11 @@ int main(int argc, char* argv[]) {
     };
 
     uint64_t zero = 0;
+    uint64_t one = 1;
+    one <<= 32;
+    one += 1;
     stagingBufferManager.stageBufferData(&zero, voxelCountBuffer->getBuffer(), sizeof(zero));
-    stagingBufferManager.stageBufferData(&zero, nodeCountBuffer->getBuffer(), sizeof(zero));
+    stagingBufferManager.stageBufferData(&one, nodeCountBuffer->getBuffer(), sizeof(one));
     stagingBufferManager.stageBufferData(&drawIndirectCommand, voxelDrawIndirectBuffer->getBuffer(), sizeof(drawIndirectCommand));
     stagingBufferManager.flush();
 
@@ -246,19 +249,19 @@ int main(int argc, char* argv[]) {
     voxelizerPass.create({dummyAttachment}, {voxelizerSubpass}, {});
 
     VoxelizerData dragonVoxelizerConstants{
-            //{0.5, 0.5, 0.5},
-            {1,1,1},
-            {256, 0.5, 0}
+        {0,0,0},
+        {1024, 4, 0}
     };
 
     VkViewport voxelizerViewport{};
-    voxelizerViewport.width = dragonVoxelizerConstants.resolution.x*1.25+2;
-    voxelizerViewport.height = dragonVoxelizerConstants.resolution.x*1.25+2;
+    voxelizerViewport.width = dragonVoxelizerConstants.resolution.x+2;
+    voxelizerViewport.height = dragonVoxelizerConstants.resolution.x+2;
     voxelizerViewport.minDepth = 0.0f;
     voxelizerViewport.maxDepth = 1.0f;
 
     VkRect2D voxelizerScissor{};
-    voxelizerScissor.extent = {static_cast<uint32_t>(dragonVoxelizerConstants.resolution.x*1.25+2), static_cast<uint32_t>(dragonVoxelizerConstants.resolution.x*1.25+2)};
+    voxelizerScissor.extent = {static_cast<uint32_t>(dragonVoxelizerConstants.resolution.x+2), static_cast<uint32_t>(dragonVoxelizerConstants.resolution.x+2)};
+    //voxelizerScissor.offset = {1,1};
 
     VkPipelineRasterizationConservativeStateCreateInfoEXT pipelineRasterizationConservativeStateCreateInfo{};
     pipelineRasterizationConservativeStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT;
@@ -274,11 +277,11 @@ int main(int argc, char* argv[]) {
             .setRenderPass(voxelizerPass, 0)
             .build(device);
 
-    auto dummyImage = resourceManager.createImage({.imageType = VK_IMAGE_TYPE_2D, .format = VK_FORMAT_R8G8B8A8_UNORM, .extent = {static_cast<uint32_t>(dragonVoxelizerConstants.resolution.x*1.25+2), static_cast<uint32_t>(dragonVoxelizerConstants.resolution.x*1.25+2), 1}, .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_4_BIT, .tiling = VK_IMAGE_TILING_OPTIMAL, .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT}, {.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, .usage = VMA_MEMORY_USAGE_GPU_ONLY});
+    auto dummyImage = resourceManager.createImage({.imageType = VK_IMAGE_TYPE_2D, .format = VK_FORMAT_R8G8B8A8_UNORM, .extent = {static_cast<uint32_t>(dragonVoxelizerConstants.resolution.x+2), static_cast<uint32_t>(dragonVoxelizerConstants.resolution.x+2), 1}, .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_4_BIT, .tiling = VK_IMAGE_TILING_OPTIMAL, .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT}, {.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, .usage = VMA_MEMORY_USAGE_GPU_ONLY});
     dummyImage->createImageView({.viewType = VK_IMAGE_VIEW_TYPE_2D, .format = VK_FORMAT_R8G8B8A8_UNORM, .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0,1,0,1}});
 
     Framebuffer imagelessFramebuffer(device, voxelizerPass);
-    imagelessFramebuffer.create({dummyImage->getImageView()}, dragonVoxelizerConstants.resolution.x*1.25+2, dragonVoxelizerConstants.resolution.x*1.25+2);
+    imagelessFramebuffer.create({dummyImage->getImageView()}, dragonVoxelizerConstants.resolution.x+2, dragonVoxelizerConstants.resolution.x+2);
 
     //Main rendering loop
     uint32_t frame = 0;
@@ -374,7 +377,7 @@ int main(int argc, char* argv[]) {
         commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerPipeline);
         commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerPipelineLayout, 0, {dragonSet, voxelizerDataSet});
 
-        vkCmdPushConstants(commandBuffer, voxelizerPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_GEOMETRY_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(dragonVoxelizerConstants), &dragonVoxelizerConstants);
+        vkCmdPushConstants(commandBuffer, voxelizerPipelineLayout, /*VK_SHADER_STAGE_VERTEX_BIT|*/VK_SHADER_STAGE_GEOMETRY_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(dragonVoxelizerConstants), &dragonVoxelizerConstants);
 
         commandBuffer.bindVertexBuffers(0, {dragon.vertexBuffer->getBuffer()}, {0});
         commandBuffer.bindIndexBuffer(dragon.indexBuffer->getBuffer(), 0, VK_INDEX_TYPE_UINT32);
@@ -426,11 +429,7 @@ int main(int argc, char* argv[]) {
 
         ResourceBarrier::bufferMemoryBarrier(commandBuffer, voxelCountBuffer->getBuffer(), 0, sizeof(uint64_t), VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_TRANSFER_WRITE_BIT);
 
-        VkBufferCopy vcReset{};
-        vcReset.size = sizeof(uint32_t);
-        vcReset.srcOffset = sizeof(uint32_t);
-        vcReset.dstOffset = 0;
-        vkCmdCopyBuffer(commandBuffer, voxelCountBuffer->getBuffer(), voxelCountBuffer->getBuffer(), 1, &vcReset);
+        vkCmdFillBuffer(commandBuffer, voxelCountBuffer->getBuffer(), 0, VK_WHOLE_SIZE, 0);
 
         vkCmdFillBuffer(commandBuffer, nodeCountBuffer->getBuffer(), 0, VK_WHOLE_SIZE, 1);
         vkCmdFillBuffer(commandBuffer, svoBuffer->getBuffer(), 0, VK_WHOLE_SIZE, 0);
