@@ -96,7 +96,7 @@ foreach(SHADER_FILE ${SHADER_FILES})
 
     add_custom_command(
             OUTPUT ${COMPILED_SHADER_FILE}
-            COMMAND ${GLSLC_EXECUTABLE} ${SHADER_FILE} -o ${COMPILED_SHADER_FILE}
+            COMMAND ${GLSLC_EXECUTABLE} -O -g --target-env=vulkan1.3 -fpreserve-bindings ${SHADER_FILE} -o ${COMPILED_SHADER_FILE}
             DEPENDS ${SHADER_FILE}
             COMMENT "Compiling shader ${SHADER_NAME}"
             VERBATIM
