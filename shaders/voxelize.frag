@@ -113,23 +113,17 @@ uint splitBy3(uint value) {
     return value;
 }
 
-// Morton encode for 3D coordinates - each coordinate can use 10 bits (0-1023 range)
 uint mortonEncode(in uvec3 position) {
-    // Ensure coordinates don't exceed 10 bits (0-1023)
     position = min(position, uvec3(1023));
 
-    // Interleave bits
     uint x = splitBy3(position.x);
     uint y = splitBy3(position.y);
     uint z = splitBy3(position.z);
 
-    // Combine the interleaved bits
     return x | (y << 1) | (z << 2);
 }
 
-// Extract every third bit and compact
 uint compactBits(uint value) {
-    // Extract every third bit and compact them
     value &= 0x09249249;
     value = (value | (value >> 2)) & 0x030C30C3;
     value = (value | (value >> 4)) & 0x0300F00F;
@@ -138,11 +132,9 @@ uint compactBits(uint value) {
     return value;
 }
 
-// Morton decode to get 3D coordinates back
 uvec3 mortonDecode(in uint morton) {
     uvec3 position;
 
-    // Extract the interleaved bits
     position.x = compactBits(morton);
     position.y = compactBits(morton >> 1);
     position.z = compactBits(morton >> 2);

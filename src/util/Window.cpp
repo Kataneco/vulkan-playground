@@ -5,3 +5,12 @@ Window::Window(int width, int height, const char *title) {
 }
 
 Window::~Window() {}
+
+void Window::initialize() {
+    glfwInit();
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+}
+
+void Window::terminate() {
+    glfwTerminate();
+}
