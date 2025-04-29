@@ -103,9 +103,7 @@ uint mixColor(uint existingPacked, vec4 newColor) {
     return packUnorm4x8(blendedColor);
 }
 
-// Splits a 10-bit integer (value) so that its bits are separated by 2 zeros
 uint splitBy3(uint value) {
-    // Insert 2 zeros after each bit of the original value
     value = (value | (value << 16)) & 0x030000FF;
     value = (value | (value << 8)) & 0x0300F00F;
     value = (value | (value << 4)) & 0x030C30C3;

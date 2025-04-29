@@ -2,14 +2,12 @@
 #include "util/VulkanUtils.h"
 
 #include "core/Device.h"
+#include "util/Window.h"
 
 class Swapchain {
 public:
-    Swapchain(Device &device, VkSurfaceKHR surface);
+    Swapchain(Device &device, Window &window);
     ~Swapchain();
-
-    void create(int width, int height);
-    void destroy();
 
     VkFormat getImageFormat() const { return imageFormat; }
     VkExtent2D getExtent() const { return extent; }
@@ -20,8 +18,11 @@ public:
     uint32_t present(uint32_t imageIndex, VkSemaphore waitSemaphore);
 
 private:
+    void create();
+    void destroy();
+
     Device &device;
-    VkSurfaceKHR surface;
+    Window &window;
 
     VkSurfaceCapabilitiesKHR surfaceCapabilities;
     std::vector<VkSurfaceFormatKHR> surfaceFormats;

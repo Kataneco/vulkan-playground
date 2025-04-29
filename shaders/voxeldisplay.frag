@@ -10,5 +10,5 @@ void main() {
     float diffuse = max(dot(normalize(inNormal), lightDir), 0.2);
 
     vec3 debugColor = fract(inNormal * 0.5 + 0.5);
-    outColor = vec4((debugColor/2)+(inColor*diffuse/2).xyz, 1.0);
+    outColor = vec4((debugColor/2)+(inColor*diffuse/2).xyz, 0.3);
 }
