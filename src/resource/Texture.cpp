@@ -33,6 +33,7 @@ VkFormat getFormat(int channels) {
     }
 }
 
+/*
 void Texture::pushTexture(ResourceManager &resourceManager, StagingBufferManager &stagingBufferManager) {
     image = resourceManager.createImage({.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = VK_IMAGE_TYPE_2D, .format = getFormat(channels), .extent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1}, .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_1_BIT, .tiling = VK_IMAGE_TILING_OPTIMAL, .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT}, {.usage = VMA_MEMORY_USAGE_AUTO});
     image->createImageView({.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = image->getImage(), .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = getFormat(channels), .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}});
@@ -40,3 +41,4 @@ void Texture::pushTexture(ResourceManager &resourceManager, StagingBufferManager
     stagingBufferManager.stageImageData(pixels.data(), image->getImage(), pixels.size(), {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, {}, {static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1});
     stagingBufferManager.flush();
 }
+ */

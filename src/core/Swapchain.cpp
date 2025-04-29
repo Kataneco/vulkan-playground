@@ -1,25 +1,31 @@
 #include "Swapchain.h"
 
-Swapchain::Swapchain(Device &device, VkSurfaceKHR surface) : device(device), surface(surface) {
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device.physicalDevice, surface, &surfaceCapabilities);
+//TODO: Collect data from Window class instead
+Swapchain::Swapchain(Device &device, Window &window) : device(device), window(window) {
+    window.createSurface(device.vulkanInstance);
+
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device.physicalDevice, window.getSurface(), &surfaceCapabilities);
     uint32_t formatCount;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device.physicalDevice, surface, &formatCount, nullptr);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(device.physicalDevice, window.getSurface(), &formatCount, nullptr);
     surfaceFormats.resize(formatCount);
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device.physicalDevice, surface, &formatCount, surfaceFormats.data());
+    vkGetPhysicalDeviceSurfaceFormatsKHR(device.physicalDevice, window.getSurface(), &formatCount, surfaceFormats.data());
     uint32_t presentModeCount;
-    vkGetPhysicalDeviceSurfacePresentModesKHR(device.physicalDevice, surface, &presentModeCount, nullptr);
+    vkGetPhysicalDeviceSurfacePresentModesKHR(device.physicalDevice, window.getSurface(), &presentModeCount, nullptr);
     presentModes.resize(presentModeCount);
-    vkGetPhysicalDeviceSurfacePresentModesKHR(device.physicalDevice, surface, &presentModeCount, presentModes.data());
+    vkGetPhysicalDeviceSurfacePresentModesKHR(device.physicalDevice, window.getSurface(), &presentModeCount, presentModes.data());
 
     //XXX
     imageFormat = VK_FORMAT_B8G8R8A8_SRGB;
+
+    //XXX
+    create();
 }
 
 Swapchain::~Swapchain() {
     destroy();
 }
 
-void Swapchain::create(int width, int height) {
+void Swapchain::create() {
     for (uint32_t i = 0; i < imageCount; ++i) {
         if (imageViews[i] != VK_NULL_HANDLE) {
             vkDestroyImageView(device.device, imageViews[i], nullptr);
@@ -27,7 +33,8 @@ void Swapchain::create(int width, int height) {
         }
     }
 
-    extent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
+    //extent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
+    extent = window.getWindowExtent();
 
     VkSwapchainPresentScalingCreateInfoEXT swapchainPresentScalingCreateInfo{};
     swapchainPresentScalingCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_SCALING_CREATE_INFO_EXT;
@@ -37,8 +44,8 @@ void Swapchain::create(int width, int height) {
 
     VkSwapchainCreateInfoKHR swapchainCreateInfo{};
     swapchainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    swapchainCreateInfo.surface = surface;
-    swapchainCreateInfo.minImageCount = 4;
+    swapchainCreateInfo.surface = window.getSurface();
+    swapchainCreateInfo.minImageCount = std::max(surfaceCapabilities.minImageCount, 3u);
     swapchainCreateInfo.imageFormat = imageFormat;
     swapchainCreateInfo.imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
     swapchainCreateInfo.imageExtent = extent;
@@ -92,7 +99,8 @@ uint32_t Swapchain::acquireNextImage(VkSemaphore semaphore, VkFence fence) {
     VkResult result = vkAcquireNextImageKHR(device.device, swapchain, UINT64_MAX, semaphore, fence, &imageIndex);
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-        create(extent.width, extent.height);
+        device.waitIdle();
+        create();
         return UINT32_MAX;
     } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         //death
@@ -115,6 +123,8 @@ uint32_t Swapchain::present(uint32_t imageIndex, VkSemaphore waitSemaphore) {
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
         //create(extent.width, extent.height);
+        device.waitIdle();
+        create();
         return 1;
     } else if (result != VK_SUCCESS) {
         //death

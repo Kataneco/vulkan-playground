@@ -29,6 +29,8 @@ public:
     void drawIndexed(uint32_t indexCount, uint32_t instanceCount = 1, uint32_t firstIndex = 0, int32_t vertexOffset = 0, uint32_t firstInstance = 0);
     void dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ);
 
+    void fillBuffer(VkBuffer buffer, VkDeviceSize offset = 0, VkDeviceSize size = VK_WHOLE_SIZE, uint32_t data = 0);
+
 private:
     VkDevice device;
     VkCommandPool commandPool;

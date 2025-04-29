@@ -6,18 +6,16 @@ int main(int argc, char* argv[]) {
     std::cout << "Haii wurld!! :3" << std::endl;
     srand(time(NULL));
 
-    int width = 1600, height = 900;
-
     Window::initialize();
-    //glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-    Window window(width, height);
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
-    uint32_t glfwExtensionCount = 0;
-    const char **glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-    std::vector<const char*> instanceExtensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+    std::vector<const char*> instanceExtensions = Window::getRequiredInstanceExtensions();
     VulkanInstance instance(VK_API_VERSION_1_3, instanceExtensions, true);
     Device device(instance, {.independentBlend = VK_TRUE, .geometryShader = VK_TRUE, .fillModeNonSolid = VK_TRUE, .wideLines = VK_TRUE, .samplerAnisotropy = VK_TRUE, .vertexPipelineStoresAndAtomics = VK_TRUE, .fragmentStoresAndAtomics = VK_TRUE}, {});
+
+    //glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+    //glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
+    Window window(1600, 900);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     DescriptorLayoutCache descriptorLayoutCache(device);
     DescriptorAllocator descriptorAllocator(device);
@@ -27,16 +25,12 @@ int main(int argc, char* argv[]) {
     CommandPool commandPool(device, device.getGraphicsFamily(), VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
     PipelineLayoutCache pipelineLayoutCache(device, descriptorLayoutCache);
 
-    VkSurfaceKHR surface;
-    glfwCreateWindowSurface(instance, window, nullptr, &surface);
-
-    Swapchain swapchain(device, surface);
-    swapchain.create(width, height);
+    Swapchain swapchain(device, window);
 
     VkImageCreateInfo depthImageCreateInfo{
             .imageType = VK_IMAGE_TYPE_2D,
             .format = VK_FORMAT_D32_SFLOAT,
-            .extent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1},
+            .extent = {swapchain.getExtent().width, swapchain.getExtent().height, 1},
             .mipLevels = 1,
             .arrayLayers = 1,
             .samples = VK_SAMPLE_COUNT_1_BIT,
@@ -116,7 +110,7 @@ int main(int argc, char* argv[]) {
             .setShaders(vertModule, fragModule)
             .setViewportState(viewport, scissor)
             .setRasterizationState(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE, 1.0f)
-            .setColorBlendState({noBlend})
+            .setColorBlendState({alphaBlend})
             .setDepthStencilState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_LESS)
             .setLayout(pipelineLayout)
             .setRenderPass(renderPass, 0)
@@ -229,19 +223,19 @@ int main(int argc, char* argv[]) {
 
     voxelizerPass.create({dummyAttachment}, {voxelizerSubpass}, {});
 
-    VoxelizerData dragonVoxelizerConstants{
+    VoxelizerData voxelizerConstants{
         {0,0,0},
         {1024, 4, 0}
     };
 
     VkViewport voxelizerViewport{};
-    voxelizerViewport.width = dragonVoxelizerConstants.resolution.x+2;
-    voxelizerViewport.height = dragonVoxelizerConstants.resolution.x+2;
+    voxelizerViewport.width = voxelizerConstants.resolution.x+2;
+    voxelizerViewport.height = voxelizerConstants.resolution.x+2;
     voxelizerViewport.minDepth = 0.0f;
     voxelizerViewport.maxDepth = 1.0f;
 
     VkRect2D voxelizerScissor{};
-    voxelizerScissor.extent = {static_cast<uint32_t>(dragonVoxelizerConstants.resolution.x+2), static_cast<uint32_t>(dragonVoxelizerConstants.resolution.x+2)};
+    voxelizerScissor.extent = {static_cast<uint32_t>(voxelizerConstants.resolution.x+2), static_cast<uint32_t>(voxelizerConstants.resolution.x+2)};
 
     VkPipelineRasterizationConservativeStateCreateInfoEXT pipelineRasterizationConservativeStateCreateInfo{};
     pipelineRasterizationConservativeStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT;
@@ -257,11 +251,11 @@ int main(int argc, char* argv[]) {
             .setRenderPass(voxelizerPass, 0)
             .build(device);
 
-    auto dummyImage = resourceManager.createImage({.imageType = VK_IMAGE_TYPE_2D, .format = VK_FORMAT_R8G8B8A8_UNORM, .extent = {static_cast<uint32_t>(dragonVoxelizerConstants.resolution.x+2), static_cast<uint32_t>(dragonVoxelizerConstants.resolution.x+2), 1}, .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_4_BIT, .tiling = VK_IMAGE_TILING_OPTIMAL, .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT}, {.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, .usage = VMA_MEMORY_USAGE_GPU_ONLY});
+    auto dummyImage = resourceManager.createImage({.imageType = VK_IMAGE_TYPE_2D, .format = VK_FORMAT_R8G8B8A8_UNORM, .extent = {static_cast<uint32_t>(voxelizerConstants.resolution.x+2), static_cast<uint32_t>(voxelizerConstants.resolution.x+2), 1}, .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_4_BIT, .tiling = VK_IMAGE_TILING_OPTIMAL, .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT}, {.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, .usage = VMA_MEMORY_USAGE_GPU_ONLY});
     dummyImage->createImageView({.viewType = VK_IMAGE_VIEW_TYPE_2D, .format = VK_FORMAT_R8G8B8A8_UNORM, .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0,1,0,1}});
 
     Framebuffer imagelessFramebuffer(device, voxelizerPass);
-    imagelessFramebuffer.create({dummyImage->getImageView()}, dragonVoxelizerConstants.resolution.x+2, dragonVoxelizerConstants.resolution.x+2);
+    imagelessFramebuffer.create({dummyImage->getImageView()}, voxelizerConstants.resolution.x+2, voxelizerConstants.resolution.x+2);
 
     //Main rendering loop
     uint32_t frame = 0;
@@ -278,9 +272,9 @@ int main(int argc, char* argv[]) {
     float yaw = 0.0f, pitch = 0.0f;
     glm::vec3 camera = {0.0f, 0.0f, -1.0f};
     bool focus = true;
-    while (!glfwWindowShouldClose(window)) {
-        glfwPollEvents();
-        if (glfwGetWindowAttrib(window, GLFW_ICONIFIED) == GLFW_TRUE) continue; //Pause rendering if minimized
+    while (!window.windowShouldClose()) {
+        window.pollEvents(); //TODO bad design
+        if (window.windowIconified()) continue; //Pause rendering if minimized
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
             focus = false;
@@ -332,20 +326,13 @@ int main(int argc, char* argv[]) {
         if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) camera.y -= speed*deltaTime;
 
         glm::mat4 view = glm::lookAt(camera, camera+glm::normalize(direction), glm::vec3(0,1,0));
-        glm::mat4 projection = glm::perspective(glm::radians(90.0f), (float)width/(float)height, 0.01f, 1000.0f);
+        glm::mat4 projection = glm::perspective(glm::radians(90.0f), (float)swapchain.getExtent().width/(float)swapchain.getExtent().height, 0.01f, 1000.0f);
         projection[1][1] *= -1;
         glm::mat4 unified = projection*view;
 
         commandBuffer.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
         //Experimental
-        if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) dragonVoxelizerConstants.center.y += speed*deltaTime;
-        if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) dragonVoxelizerConstants.center.y -= speed*deltaTime;
-        if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) dragonVoxelizerConstants.center.x -= speed*deltaTime;
-        if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) dragonVoxelizerConstants.center.x += speed*deltaTime;
-        if (glfwGetKey(window, GLFW_KEY_Z) == GLFW_PRESS) dragonVoxelizerConstants.center.z += speed*deltaTime;
-        if (glfwGetKey(window, GLFW_KEY_X) == GLFW_PRESS) dragonVoxelizerConstants.center.z -= speed*deltaTime;
-
         glm::mat4 model = glm::scale(glm::vec3(1.0f,1.0f,1.0f))*glm::rotate(glm::radians(time*0.0f), glm::vec3(0.0f, 1.0f, 0.0f))*glm::translate(glm::vec3(0,0,0));
         glm::mat4 modelb = glm::scale(glm::vec3(1.0f,1.0f,1.0f)*0.3f)*glm::rotate(glm::radians(time*-1.0f), glm::vec3(0.0f, 1.0f, 0.0f))*glm::translate(glm::vec3(1,0,0));
         stagingBufferManager.stageBufferData(&model, objectData->getBuffer(), sizeof(glm::mat4));
@@ -355,15 +342,15 @@ int main(int argc, char* argv[]) {
         voxelizerPass.begin(commandBuffer, imagelessFramebuffer, voxelizerScissor, {});
 
         commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerPipeline);
-        commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerPipelineLayout, 0, {dragonSet, voxelizerDataSet});
+        commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerPipelineLayout, 1, {voxelizerDataSet});
+        commandBuffer.pushConstants(voxelizerPipelineLayout, VK_SHADER_STAGE_GEOMETRY_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(voxelizerConstants), &voxelizerConstants);
 
-        vkCmdPushConstants(commandBuffer, voxelizerPipelineLayout, /*VK_SHADER_STAGE_VERTEX_BIT|*/VK_SHADER_STAGE_GEOMETRY_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(dragonVoxelizerConstants), &dragonVoxelizerConstants);
-
+        commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerPipelineLayout, 0, {dragonSet});
         commandBuffer.bindVertexBuffers(0, {dragon.vertexBuffer->getBuffer()}, {0});
         commandBuffer.bindIndexBuffer(dragon.indexBuffer->getBuffer(), 0, VK_INDEX_TYPE_UINT32);
         commandBuffer.drawIndexed(dragon.indices.size());
 
-        commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerPipelineLayout, 0, {bunnySet, voxelizerDataSet});
+        commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerPipelineLayout, 0, {bunnySet});
         commandBuffer.bindVertexBuffers(0, {bunny.vertexBuffer->getBuffer()}, {0});
         commandBuffer.bindIndexBuffer(bunny.indexBuffer->getBuffer(), 0, VK_INDEX_TYPE_UINT32);
         commandBuffer.drawIndexed(bunny.indices.size());
@@ -389,7 +376,7 @@ int main(int argc, char* argv[]) {
         commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, {voxeldisplayDataSet});
 
         commandBuffer.pushConstants(pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(unified), &unified);
-        commandBuffer.pushConstants(pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, sizeof(unified), sizeof(dragonVoxelizerConstants), &dragonVoxelizerConstants);
+        commandBuffer.pushConstants(pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, sizeof(unified), sizeof(voxelizerConstants), &voxelizerConstants);
 
         vkCmdDrawIndirect(commandBuffer, voxelDrawIndirectBuffer->getBuffer(), 0, 1, sizeof(VkDrawIndirectCommand));
 
@@ -397,24 +384,21 @@ int main(int argc, char* argv[]) {
 
         ResourceBarrier::bufferMemoryBarrier(commandBuffer, voxelCountBuffer->getBuffer(), 0, sizeof(uint64_t), VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_TRANSFER_WRITE_BIT);
 
-        vkCmdFillBuffer(commandBuffer, voxelCountBuffer->getBuffer(), 0, VK_WHOLE_SIZE, 0);
+        commandBuffer.fillBuffer(voxelCountBuffer->getBuffer(), 0, VK_WHOLE_SIZE, 0);
 
-        vkCmdFillBuffer(commandBuffer, nodeCountBuffer->getBuffer(), 0, VK_WHOLE_SIZE, 1);
-        vkCmdFillBuffer(commandBuffer, svoBuffer->getBuffer(), 0, VK_WHOLE_SIZE, 0);
+        commandBuffer.fillBuffer(nodeCountBuffer->getBuffer(), 0, VK_WHOLE_SIZE, 1);
+        commandBuffer.fillBuffer(svoBuffer->getBuffer(), 0, VK_WHOLE_SIZE, 0);
 
         commandBuffer.end();
 
         commandBuffer.submit(device.getGraphicsQueue(), {swapchainLockSemaphore[frame]}, {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT}, {renderLockSemaphore[frame]}, frameLockFence[frame]);
 
         if (swapchain.present(swapchainIndex, renderLockSemaphore[frame]) == 1) {
-            device.waitIdle();
-            glfwGetFramebufferSize(window, &width, &height);
-            swapchain.create(width, height);
             framebuffers.clear();
             framebuffers.reserve(swapchain.getImageCount());
 
             //depth bullshit
-            depthImageCreateInfo.extent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1};
+            depthImageCreateInfo.extent = {swapchain.getExtent().width, swapchain.getExtent().height, 1};
             depthImage = resourceManager.createImage(depthImageCreateInfo, {.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, .usage = VMA_MEMORY_USAGE_GPU_ONLY});
             depthImageViewCreateInfo.image = depthImage->getImage();
             depthImage->createImageView(depthImageViewCreateInfo);
@@ -436,8 +420,6 @@ int main(int argc, char* argv[]) {
 
     vkDestroyPipeline(device, voxelizerPipeline, nullptr);
     vkDestroyPipeline(device, pipeline, nullptr);
-    swapchain.destroy();
-    vkDestroySurfaceKHR(instance, surface, nullptr);
     Window::terminate();
     return 0;
 }

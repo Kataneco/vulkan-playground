@@ -94,3 +94,7 @@ void CommandBuffer::submit(VkQueue queue, const std::vector<VkSemaphore> &waitSe
 
     vkQueueSubmit(queue, 1, &submitInfo, fence);
 }
+
+void CommandBuffer::fillBuffer(VkBuffer buffer, VkDeviceSize offset, VkDeviceSize size, uint32_t data) {
+    vkCmdFillBuffer(commandBuffer, buffer, offset, size, data);
+}
