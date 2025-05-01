@@ -3,9 +3,11 @@ precision highp int;
 
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
-layout(location = 2) in vec2 texCoord;
+layout(location = 2) in vec3 texCoord_priority;
 
 struct Node {
+    int parent;
+    int childCount;
     int children[8];
 };
 
@@ -52,6 +54,15 @@ int findOrCreateVoxel(ivec3 voxelPosition, uint depth, uint maxDepth) {
             int prior = atomicCompSwap(nodes[nodeIndex].children[childIndex], 0, 2147483647);
             if (prior == 0) {
                 uint newNodeIndex = atomicAdd(nodeCount, 1);
+                nodes[newNodeIndex].parent = nodeIndex;
+
+                int backtrace = nodeIndex;
+                while (backtrace > 0) {
+                    atomicAdd(nodes[backtrace].childCount, 1);
+                    backtrace = nodes[backtrace].parent;
+                }
+                atomicAdd(nodes[backtrace].childCount, 1);
+
                 atomicCompSwap(nodes[nodeIndex].children[childIndex], 2147483647, int(newNodeIndex));
             }
         }
@@ -81,6 +92,13 @@ int findOrCreateVoxel(ivec3 voxelPosition, uint depth, uint maxDepth) {
             voxels[voxelIndex].position = 0;
             int newLeafPointer = -int(voxelIndex + 1);
             atomicCompSwap(nodes[nodeIndex].children[childIndex], 2147483647, newLeafPointer);
+
+            int backtrace = nodeIndex;
+            while (backtrace > 0) {
+                atomicAdd(nodes[backtrace].childCount, 1);
+                backtrace = nodes[backtrace].parent;
+            }
+            atomicAdd(nodes[backtrace].childCount, 1);
         }
     }
 
@@ -157,10 +175,10 @@ void main() {
         bool isNewVoxel = bool(atomicCompSwap(voxels[voxelIndex].position, expected, positionPacked) == 0);
 
         if (isNewVoxel) {
-            atomicExchange(voxels[voxelIndex].normal, packSnorm4x8(vec4(normalize(normal), 1.0)));
+            atomicExchange(voxels[voxelIndex].normal, packUnorm4x8(vec4((normalize(normal)+vec3(1,1,1))/2, texCoord_priority.z)));
             atomicExchange(voxels[voxelIndex].color, packUnorm4x8(vec4(1.0, 1.0, 1.0, 1.0)));
         } else {
-            /*
+        /*
             uint oldNormalPacked = atomicAdd(voxels[voxelIndex].normal, 0);
             uint oldColorPacked = atomicAdd(voxels[voxelIndex].color, 0);
 
@@ -169,7 +187,9 @@ void main() {
 
             atomicExchange(voxels[voxelIndex].normal, newNormalPacked);
             atomicExchange(voxels[voxelIndex].color, newColorPacked);
-            */
+        */
+            atomicMax(voxels[voxelIndex].normal, packUnorm4x8(vec4((normalize(normal)+vec3(1,1,1))/2, texCoord_priority.z)));
+            //atomicExchange(voxels[voxelIndex].normal, packSnorm4x8(vec4(normalize(normal), texCoord_priority.z)));
         }
     }
 }

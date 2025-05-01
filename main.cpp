@@ -14,7 +14,9 @@ int main(int argc, char* argv[]) {
 
     //glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
     //glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
+    Texture icon = Texture::loadImage("/home/honeywrap/Documents/kitten/assets/icon.png");
     Window window(1600, 900);
+    window.setWindowIcon(icon, icon);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     DescriptorLayoutCache descriptorLayoutCache(device);
@@ -130,7 +132,7 @@ int main(int argc, char* argv[]) {
     std::vector<CommandBuffer> commandBuffers = commandPool.allocateCommandBuffers(swapchain.getImageCount());
 
     //Experimental
-    Mesh dragon = Mesh::loadObj("/home/honeywrap/Documents/kitten/assets/dragon.obj");
+    Mesh dragon = Mesh::loadObj("/home/honeywrap/Documents/kitten/assets/bunny.obj");
     dragon.pushMesh(resourceManager, stagingBufferManager);
 
     Mesh bunny = Mesh::loadObj("/home/honeywrap/Documents/kitten/assets/bunny.obj");
@@ -333,8 +335,8 @@ int main(int argc, char* argv[]) {
         commandBuffer.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
         //Experimental
-        glm::mat4 model = glm::scale(glm::vec3(1.0f,1.0f,1.0f))*glm::rotate(glm::radians(time*0.0f), glm::vec3(0.0f, 1.0f, 0.0f))*glm::translate(glm::vec3(0,0,0));
-        glm::mat4 modelb = glm::scale(glm::vec3(1.0f,1.0f,1.0f)*0.3f)*glm::rotate(glm::radians(time*-1.0f), glm::vec3(0.0f, 1.0f, 0.0f))*glm::translate(glm::vec3(1,0,0));
+        glm::mat4 model = glm::scale(glm::vec3(1.0f,1.0f,1.0f))*glm::rotate(glm::radians(time*50.0f), glm::vec3(0.0f, 1.0f, 0.0f))*glm::translate(glm::vec3(0,0,0));
+        glm::mat4 modelb = glm::scale(glm::vec3(1.0f,1.0f,1.0f)*0.3f)*glm::rotate(glm::radians(time*-1.0f), glm::vec3(0.0f, 1.0f, 0.0f))*glm::translate(glm::vec3(2,1,0));
         stagingBufferManager.stageBufferData(&model, objectData->getBuffer(), sizeof(glm::mat4));
         stagingBufferManager.stageBufferData(&modelb, objectData->getBuffer(), sizeof(glm::mat4), sizeof(glm::mat4));
         stagingBufferManager.flush();
