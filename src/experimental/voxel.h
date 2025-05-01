@@ -13,12 +13,7 @@ struct Voxel {
 };
 
 struct OctreeNode {
-    int x0y0z0;
-    int x1y0z0;
-    int x0y1z0;
-    int x1y1z0;
-    int x0y0z1;
-    int x1y0z1;
-    int x0y1z1;
-    int x1y1z1;
+    int parent;
+    int childCount;
+    int nodes[8];
 };

@@ -38,6 +38,7 @@ layout(push_constant) uniform VoxelDisplayData {
 
 layout(location = 0) out vec4 outColor;
 layout(location = 1) out vec3 outNormal;
+layout(location = 2) out vec3 outPosition;
 
 // Splits a 10-bit integer (value) so that its bits are separated by 2 zeros
 uint splitBy3(uint value) {
@@ -88,7 +89,9 @@ uvec3 mortonDecode(in uint morton) {
 
 void main() {
     const uint vertexIndex = CUBE_INDICES[gl_VertexIndex];
-    const vec3 localPosition = vec3(CUBE_VERTICES[vertexIndex]);
+    vec3 localPosition = vec3(CUBE_VERTICES[vertexIndex]);
+    //localPosition *= 0.3001;
+    localPosition *= 1.0001;
 
     Voxel voxel = voxels[gl_InstanceIndex];
 
@@ -99,5 +102,6 @@ void main() {
 
     gl_Position = data.proj * vec4(worldPosition, 1);
     outColor = unpackUnorm4x8(voxel.color);
-    outNormal = unpackSnorm4x8(voxel.normal).xyz;
+    outNormal = (unpackUnorm4x8(voxel.normal).xyz*2)-vec3(1,1,1);
+    outPosition = worldPosition;
 }
