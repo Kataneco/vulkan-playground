@@ -1,6 +1,6 @@
 #version 460
 
-layout(local_size_x = 256) in;
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
 struct Node {
     int parent;
@@ -30,7 +30,15 @@ layout(std430, set = 1, binding = 3) readonly buffer NodeBuffer {
     Node nodes[];
 };
 
-layout(std430, set = 0, binding = 0) writeonly buffer Voxels {
+//Sortvoxels descriptor set, bound index 0, binding 0
+layout(std430, set = 0, binding = 0) buffer DispatchIndirect {
+    uint x;
+    uint y;
+    uint z;
+} dispatch;
+
+//Sortvoxels descriptor set, bound index 0, binding 1
+layout(std430, set = 0, binding = 1) writeonly buffer Voxels {
     uint sorted_voxels[];
 };
 
@@ -101,23 +109,33 @@ uint computeVoxelSortedIndex(uint mortonCode, uint depth, uint maxDepth) {
     return runningIndex - 1;
 }
 
-//I don't actually trust u you pesky ChatGPT 4 I can't even read this shit kill yourself
-uint sorted_to_eytzinger(uint i, uint n) {
-    int e = 0;       // Eytzinger index
-    int l = 0, r = n;
+//I don't actually trust u you pesky ChatGPT 4 I can't even read this shit kill yourself...
+int sortedToEytzingerComplete(int sortedIndex, int arraySize) {
+    int lo = 0;
+    int hi = arraySize - 1;
+    int eytzingerPos = 0; // Start at the root
 
-    while (r - l > 1) {
-        int m = (l + r) / 2;
-        if (i < m) {
-            e = 2 * e + 1;
-            r = m;
+    while (lo <= hi) {
+        int mid = (lo + hi) / 2;
+
+        if (sortedIndex == mid) {
+            return eytzingerPos;
+        } else if (sortedIndex < mid) {
+            hi = mid - 1;
+            eytzingerPos = 2 * eytzingerPos + 1; // Left child
         } else {
-            e = 2 * e + 2;
-            l = m;
+            lo = mid + 1;
+            eytzingerPos = 2 * eytzingerPos + 2; // Right child
         }
     }
 
-    return e;
+    return -1;
+}
+
+void init() {
+    dispatch.x = uint(ceil(float(voxelCount)/float(gl_WorkGroupSize.x)));
+    dispatch.y = 1;
+    dispatch.z = 1;
 }
 
 void main() {
@@ -125,6 +143,6 @@ void main() {
     if (index >= voxelCount) return;
     Voxel voxel = voxels[index];
     uint depth = uint(ceil(log2(data.resolution.x)));
-    uint mapto = sorted_to_eytzinger(computeVoxelSortedIndex(voxel.position, depth, depth), voxelCount); //Binary search tree to maintain cache locality
+    uint mapto = sortedToEytzingerComplete(int(computeVoxelSortedIndex(voxel.position, depth, depth)), int(voxelCount)); //Binary search tree to maintain cache locality
     sorted_voxels[mapto] = voxel.position;
 }
