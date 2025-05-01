@@ -1,0 +1,130 @@
+#version 460
+
+layout(local_size_x = 256) in;
+
+struct Node {
+    int parent;
+    int childCount;
+    int children[8];
+};
+
+struct Voxel {
+    uint position;
+    uint normal;
+    uint color;
+};
+
+layout(std430, set = 1, binding = 0) readonly buffer VoxelCountBuffer {
+    uint voxelCount;
+};
+
+layout(std430, set = 1, binding = 1) readonly buffer VoxelBuffer {
+    Voxel voxels[];
+};
+
+layout(std430, set = 1, binding = 2) readonly buffer NodeCountBuffer {
+    uint nodeCount;
+};
+
+layout(std430, set = 1, binding = 3) readonly buffer NodeBuffer {
+    Node nodes[];
+};
+
+layout(std430, set = 0, binding = 0) writeonly buffer Voxels {
+    uint sorted_voxels[];
+};
+
+layout(push_constant) uniform VoxelizerData {
+    vec3 center;
+    vec3 resolution; // x: dimensions^3, y: unit length, z: unused
+} data;
+
+//Thamks Cloude 3.7 I love you
+uint computeVoxelSortedIndex(uint mortonCode, uint depth, uint maxDepth) {
+    // Start with the total count from the root node (all nodes in the tree)
+    // and subtract as we traverse down
+    uint runningIndex = nodes[0].childCount;
+    int nodeIndex = 0;
+
+    for (uint currentDepth = 0; currentDepth < depth; ++currentDepth) {
+        // Extract child index directly from morton code
+        // For depth d, we look at bits 3*(maxDepth-d-1) to 3*(maxDepth-d-1)+2
+        uint shift = 3 * (maxDepth - currentDepth - 1);
+        uint childIndex = (mortonCode >> shift) & 7; // Extract 3 bits (0-7)
+
+        // Subtract counts of nodes that come AFTER our path
+        for (uint i = childIndex + 1; i < 8; ++i) {
+            int childPointer = nodes[nodeIndex].children[i];
+            if (childPointer > 0) {
+                // Internal node - subtract all its descendants
+                runningIndex -= nodes[childPointer].childCount;
+            } else if (childPointer < 0) {
+                // Leaf node - subtract 1
+                runningIndex -= 1;
+            }
+        }
+
+        // Move to the next node
+        int nextNodePointer = nodes[nodeIndex].children[childIndex];
+        if (nextNodePointer <= 0) {
+            // We hit a leaf or empty node before target depth
+            return 4294967295; // Or appropriate error code
+        }
+
+        nodeIndex = nextNodePointer;
+    }
+
+    // Handle the final level
+    uint shift = 3 * (maxDepth - depth);
+    uint childIndex = (mortonCode >> shift) & 7; // Extract 3 bits
+
+    // Subtract counts of nodes that come AFTER our target
+    for (uint i = childIndex + 1; i < 8; ++i) {
+        int childPointer = nodes[nodeIndex].children[i];
+        if (childPointer < 0) {
+            // Leaf node - subtract 1
+            runningIndex -= 1;
+        } else if (childPointer > 0) {
+            // Internal node - subtract all its descendants
+            runningIndex -= nodes[childPointer].childCount;
+        }
+    }
+
+    // Check if the target voxel exists
+    int childPointer = nodes[nodeIndex].children[childIndex];
+    if (childPointer >= 0) {
+        // Not a voxel (either empty or internal node)
+        return 4294967295;
+    }
+
+    // Return 0-based index
+    return runningIndex - 1;
+}
+
+//I don't actually trust u you pesky ChatGPT 4 I can't even read this shit kill yourself
+uint sorted_to_eytzinger(uint i, uint n) {
+    int e = 0;       // Eytzinger index
+    int l = 0, r = n;
+
+    while (r - l > 1) {
+        int m = (l + r) / 2;
+        if (i < m) {
+            e = 2 * e + 1;
+            r = m;
+        } else {
+            e = 2 * e + 2;
+            l = m;
+        }
+    }
+
+    return e;
+}
+
+void main() {
+    const uint index = gl_GlobalInvocationID.x;
+    if (index >= voxelCount) return;
+    Voxel voxel = voxels[index];
+    uint depth = uint(ceil(log2(data.resolution.x)));
+    uint mapto = sorted_to_eytzinger(computeVoxelSortedIndex(voxel.position, depth, depth), voxelCount); //Binary search tree to maintain cache locality
+    sorted_voxels[mapto] = voxel.position;
+}

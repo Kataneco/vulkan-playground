@@ -163,7 +163,7 @@ void main() {
 
     if (any(lessThan(voxelPosition, ivec3(0))) || any(greaterThanEqual(voxelPosition, ivec3(int(data.resolution.x))))) discard;
 
-    uint depth = uint(log2(data.resolution.x));
+    uint depth = uint(ceil(log2(data.resolution.x)));
     int voxelPointer = findOrCreateVoxel(voxelPosition, depth, depth);
 
     if (voxelPointer < 0) {
