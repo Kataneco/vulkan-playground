@@ -259,6 +259,54 @@ int main(int argc, char* argv[]) {
     Framebuffer imagelessFramebuffer(device, voxelizerPass);
     imagelessFramebuffer.create({dummyImage->getImageView()}, voxelizerConstants.resolution.x+2, voxelizerConstants.resolution.x+2);
 
+    //Experimental: sortvoxels
+    auto sortvoxelsCode = readFile("shaders/sortvoxels.comp.spv");
+    ShaderModule sortvoxelsModule(device, sortvoxelsCode);
+    ShaderReflection sortvoxelsShader(sortvoxelsCode);
+    //TODO: This is stupid reimplement this please
+    ShaderCombo sortvoxelsCombo; sortvoxelsCombo += sortvoxelsShader;
+    VkPipelineLayout sortvoxelsPipelineLayout = pipelineLayoutCache.createPipelineLayout(sortvoxelsCombo);
+
+    VkPipelineShaderStageCreateInfo sortvoxels_init_stage{};
+    sortvoxels_init_stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    sortvoxels_init_stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+    sortvoxels_init_stage.module = sortvoxelsModule;
+    sortvoxels_init_stage.pName = "init";
+
+    VkComputePipelineCreateInfo sortvoxels_init_info{};
+    sortvoxels_init_info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+    sortvoxels_init_info.stage = sortvoxels_init_stage;
+    sortvoxels_init_info.layout = sortvoxelsPipelineLayout;
+
+    VkPipelineShaderStageCreateInfo sortvoxels_main_stage{};
+    sortvoxels_main_stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    sortvoxels_main_stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+    sortvoxels_main_stage.module = sortvoxelsModule;
+    sortvoxels_main_stage.pName = "main";
+
+    VkComputePipelineCreateInfo sortvoxels_main_info{};
+    sortvoxels_main_info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+    sortvoxels_main_info.stage = sortvoxels_main_stage;
+    sortvoxels_main_info.layout = sortvoxelsPipelineLayout;
+
+    VkPipeline sortvoxels_init_pipeline;
+    vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &sortvoxels_init_info, nullptr, &sortvoxels_init_pipeline);
+
+    VkPipeline sortvoxels_main_pipeline;
+    vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &sortvoxels_main_info, nullptr, &sortvoxels_main_pipeline);
+
+    auto sortedvoxelDispatchIndirectBuffer = resourceManager.createBuffer({.size = sizeof(uint32_t)*3, .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT});
+    auto sortedvoxelBuffer = resourceManager.createBuffer({.size = sizeof(uint32_t)*1024*1024*4, .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT});
+
+    VkDescriptorBufferInfo svDI = {sortedvoxelDispatchIndirectBuffer->getBuffer(), 0, VK_WHOLE_SIZE};
+    VkDescriptorBufferInfo svB = {sortedvoxelBuffer->getBuffer(), 0, VK_WHOLE_SIZE};
+
+    VkDescriptorSet sortvoxelsDescriptorSet;
+    DescriptorBuilder(descriptorLayoutCache, descriptorAllocator)
+            .bind_buffer(0, &svDI, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT)
+            .bind_buffer(1, &svB, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT)
+            .build(sortvoxelsDescriptorSet);
+
     //Main rendering loop
     uint32_t frame = 0;
     const auto start = std::chrono::high_resolution_clock::now(); //Timestamp for rendering start
@@ -369,6 +417,13 @@ int main(int argc, char* argv[]) {
 
         ResourceBarrier::bufferMemoryBarrier(commandBuffer, voxelDrawIndirectBuffer->getBuffer(), sizeof(uint32_t), sizeof(uint32_t), VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT);
 
+        commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_COMPUTE, sortvoxels_init_pipeline);
+        commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_COMPUTE, sortvoxelsPipelineLayout, 0, {sortvoxelsDescriptorSet, voxelizerDataSet});
+        commandBuffer.pushConstants(sortvoxelsPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(voxelizerConstants), &voxelizerConstants);
+        commandBuffer.dispatch(1,1,1);
+        commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_COMPUTE, sortvoxels_main_pipeline);
+        vkCmdDispatchIndirect(commandBuffer, sortedvoxelDispatchIndirectBuffer->getBuffer(), 0);
+
         renderPass.begin(commandBuffer, framebuffers[frame], scissor, {{.color = {0.0f, 0.0f, 0.0f, 0.0f}}, {.depthStencil = {1.0f, 0}}});
 
         vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
@@ -415,11 +470,13 @@ int main(int argc, char* argv[]) {
             scissor.extent = swapchain.getExtent();
         }
 
-        frame = (frame + 1) % swapchain.getImageCount(); //Jump to next frame
+        frame = (frame+1) % swapchain.getImageCount(); //Jump to next frame
     }
 
     device.waitIdle();
 
+    vkDestroyPipeline(device, sortvoxels_main_pipeline, nullptr);
+    vkDestroyPipeline(device, sortvoxels_init_pipeline, nullptr);
     vkDestroyPipeline(device, voxelizerPipeline, nullptr);
     vkDestroyPipeline(device, pipeline, nullptr);
     Window::terminate();
