@@ -4,6 +4,7 @@ ShaderReflection::ShaderReflection(const std::string &spirvCode) {
     SpvReflectResult result = spvReflectCreateShaderModule(spirvCode.size(), spirvCode.data(), &module);
     if (result != SPV_REFLECT_RESULT_SUCCESS) {
         //death
+        std::cerr << "Failed to reflect shader" << std::endl;
     }
     reflect();
     //spvReflectDestroyShaderModule(&module);

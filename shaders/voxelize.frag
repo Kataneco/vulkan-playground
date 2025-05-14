@@ -176,7 +176,7 @@ void main() {
 
         if (isNewVoxel) {
             atomicExchange(voxels[voxelIndex].normal, packUnorm4x8(vec4((normalize(normal)+vec3(1,1,1))/2, texCoord_priority.z)));
-            atomicExchange(voxels[voxelIndex].color, packUnorm4x8(vec4(1.0, 1.0, 1.0, 1.0)));
+            atomicExchange(voxels[voxelIndex].color, packUnorm4x8(vec4(1.0, 1.0, 1.0, texCoord_priority.x)));
         } else {
         /*
             uint oldNormalPacked = atomicAdd(voxels[voxelIndex].normal, 0);
