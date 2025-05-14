@@ -8,7 +8,7 @@ size_t hash_combine(size_t lhs, size_t rhs) {
 std::string readFile(const char* filePath) {
     std::ifstream file(filePath, std::ios::ate | std::ios::binary);
 
-    if(!file.is_open()) throw std::runtime_error("Failed to open file");
+    if(!file.is_open()) throw std::runtime_error("Failed to open file: "+std::string(filePath));
 
     size_t fileSize = static_cast<size_t>(file.tellg());
     std::string data(fileSize, ' ');
