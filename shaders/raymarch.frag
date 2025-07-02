@@ -112,16 +112,13 @@ int findVoxel(ivec3 voxelPosition, uint depth, uint maxDepth) {
 }
 
 void main() {
-    // Set up scene parameters
-    const vec3 boxSize = vec3(2.0); // Half-size of the bounding box (total size 4x4x4)
-    const float voxelGridSize = 512.0; // Grid resolution 512³
-    const float voxelSize = (boxSize.x*2) / voxelGridSize; // Size of a single voxel
+    const vec3 boxSize = vec3(2.0);
+    const float voxelGridSize = 512.0;
+    const float voxelSize = (boxSize.x*2) / voxelGridSize;
 
-    // Initialize with sky/background color
     vec3 backgroundColor = vec3(0.1, 0.1, 0.2);
     outColor = vec4(backgroundColor, 1.0);
 
-    // Calculate ray direction from camera
     vec2 uv = vec2(gl_FragCoord.xy) / vec2(data.resolution);
     vec4 clip = vec4(uv * 2.0 - 1.0, 0.0, 1.0);
     vec4 viewSpace = vec4(data.invProjection * clip);
@@ -130,7 +127,6 @@ void main() {
     vec3 rayDirection = normalize(worldSpace.xyz);
     vec3 rayOrigin = data.invView[3].xyz;
 
-    // Ray-box intersection test
     vec3 boxMin = -boxSize;
     vec3 boxMax = boxSize;
     vec3 tMin = (boxMin - rayOrigin) / rayDirection;
@@ -140,12 +136,10 @@ void main() {
     float tNear = max(max(t1.x, t1.y), t1.z);
     float tFar = min(min(t2.x, t2.y), t2.z);
 
-    // If ray doesn't hit box, return background color
     if(tNear >= tFar || tFar < 0.0) {
         return;
     }
 
-    // Ensure we start from the box entry point
     float startT = max(tNear, 0.0);
     vec3 currentPosition = rayOrigin + startT * rayDirection;
 
@@ -192,7 +186,6 @@ void main() {
                 float diffuse = max(dot(lnormal, lightDir), 0.2); // Ambient + diffuse
                 vec3 color = (vec3(0.8, 0.85, 0.9)/2+lnormal/2) * diffuse;
 
-                // Optional: Add specular highlight
                 vec3 viewDir = -rayDirection;
                 vec3 halfwayDir = normalize(lightDir + viewDir);
                 float spec = pow(max(dot(lnormal, halfwayDir), 0.0), 32.0);

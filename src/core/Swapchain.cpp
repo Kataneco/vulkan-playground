@@ -104,7 +104,7 @@ uint32_t Swapchain::acquireNextImage(VkSemaphore semaphore, VkFence fence) {
         return UINT32_MAX;
     } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         //death
-
+        std::cerr << "Error with acquiring next swapchain image" << std::endl;
     }
 
     return imageIndex;

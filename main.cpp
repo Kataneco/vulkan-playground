@@ -393,7 +393,7 @@ int main(int argc, char* argv[]) {
 
         ResourceBarrier::bufferMemoryBarrier(commandBuffer, voxelDrawIndirectBuffer->getBuffer(), sizeof(uint32_t), sizeof(uint32_t), VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT);
 
-        renderPass.begin(commandBuffer, framebuffers[frame], scissor, {{.color = {0.0f, 0.0f, 0.0f, 0.0f}}, {.depthStencil = {1.0f, 0}}});
+        renderPass.begin(commandBuffer, framebuffers[swapchainIndex], scissor, {{.color = {0.0f, 0.0f, 0.0f, 0.0f}}, {.depthStencil = {1.0f, 0}}});
 
         vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
@@ -449,6 +449,6 @@ int main(int argc, char* argv[]) {
     vkDestroyPipeline(device, raymarch, nullptr);
     vkDestroyPipeline(device, voxelizerPipeline, nullptr);
     vkDestroyPipeline(device, pipeline, nullptr);
-    Window::terminate();
+    //Window::terminate();
     return 0;
 }
