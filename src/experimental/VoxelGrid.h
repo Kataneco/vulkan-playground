@@ -5,6 +5,10 @@
 #include "../Engine.h"
 
 class VoxelGrid {
+public:
+    explicit VoxelGrid(VkDevice device, VoxelizerData options);
+    ~VoxelGrid();
+
     VoxelizerData voxelizerData;
 
     std::shared_ptr<Buffer> voxelBuffer;
@@ -17,4 +21,5 @@ class VoxelGrid {
     Framebuffer framebuffer;
     VkPipeline pipeline;
     VkPipelineLayout pipelineLayout;
+private:
 };
