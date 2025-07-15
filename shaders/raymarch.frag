@@ -127,8 +127,8 @@ void main() {
     vec3 rayDirection = normalize(worldSpace.xyz);
     vec3 rayOrigin = data.invView[3].xyz;
 
-    vec3 boxMin = -boxSize;
-    vec3 boxMax = boxSize;
+    vec3 boxMin = vec3(0);//-boxSize;
+    vec3 boxMax = boxSize+boxSize;
     vec3 tMin = (boxMin - rayOrigin) / rayDirection;
     vec3 tMax = (boxMax - rayOrigin) / rayDirection;
     vec3 t1 = min(tMin, tMax);
@@ -145,7 +145,7 @@ void main() {
 
     // Prepare for DDA algorithm
     // Convert ray to voxel grid space where each voxel is 1 unit
-    vec3 voxelRayOrigin = (currentPosition + boxSize) * (voxelGridSize / (boxSize.x*2));
+    vec3 voxelRayOrigin = (currentPosition) * (voxelGridSize / (boxSize.x*2));
 
     // Get initial voxel cell
     ivec3 mapPos = ivec3(floor(voxelRayOrigin));
