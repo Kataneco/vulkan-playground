@@ -4,6 +4,7 @@ precision highp int;
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
 layout(location = 2) in vec3 texCoord_priority;
+layout(location = 3) in vec3 root;
 
 struct Node {
     int parent;
@@ -56,13 +57,6 @@ int findOrCreateVoxel(ivec3 voxelPosition, uint depth, uint maxDepth) {
                 uint newNodeIndex = atomicAdd(nodeCount, 1);
                 nodes[newNodeIndex].parent = nodeIndex;
 
-                int backtrace = nodeIndex;
-                while (backtrace > 0) {
-                    atomicAdd(nodes[backtrace].childCount, 1);
-                    backtrace = nodes[backtrace].parent;
-                }
-                atomicAdd(nodes[backtrace].childCount, 1);
-
                 atomicCompSwap(nodes[nodeIndex].children[childIndex], 2147483647, int(newNodeIndex));
             }
         }
@@ -92,13 +86,6 @@ int findOrCreateVoxel(ivec3 voxelPosition, uint depth, uint maxDepth) {
             voxels[voxelIndex].position = 0;
             int newLeafPointer = -int(voxelIndex + 1);
             atomicCompSwap(nodes[nodeIndex].children[childIndex], 2147483647, newLeafPointer);
-
-            int backtrace = nodeIndex;
-            while (backtrace > 0) {
-                atomicAdd(nodes[backtrace].childCount, 1);
-                backtrace = nodes[backtrace].parent;
-            }
-            atomicAdd(nodes[backtrace].childCount, 1);
         }
     }
 
@@ -161,7 +148,7 @@ uvec3 mortonDecode(in uint morton) {
 void main() {
     ivec3 voxelPosition = ivec3(floor(position / data.resolution.y + 0.5));
 
-    if (any(lessThan(voxelPosition, ivec3(0))) || any(greaterThanEqual(voxelPosition, ivec3(int(data.resolution.x))))) discard;
+    if (any(lessThan(voxelPosition, ivec3(root))) || any(greaterThanEqual(voxelPosition, ivec3(root)+ivec3(int(data.resolution.x))))) discard;
 
     uint depth = uint(ceil(log2(data.resolution.x)));
     int voxelPointer = findOrCreateVoxel(voxelPosition, depth, depth);
