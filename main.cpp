@@ -151,8 +151,10 @@ int main(int argc, char* argv[]) {
 
     VoxelizerData voxelizerConstants{
         {0,0,0},
-        {512, 1, 8}
+        {512, 1, 2}
     };
+
+    uint32_t padding = 0;
 
     uint64_t zero = 0;
     //uint64_t one = 1;
@@ -229,18 +231,18 @@ int main(int argc, char* argv[]) {
     voxelizerPass.create({dummyAttachment}, {voxelizerSubpass}, {});
     
     VkViewport voxelizerViewport{};
-    voxelizerViewport.width = voxelizerConstants.resolution.x+2;
-    voxelizerViewport.height = voxelizerConstants.resolution.x+2;
+    voxelizerViewport.width = voxelizerConstants.resolution.x+padding;
+    voxelizerViewport.height = voxelizerConstants.resolution.x+padding;
     voxelizerViewport.minDepth = 0.0f;
     voxelizerViewport.maxDepth = 1.0f;
 
     //TODO Use to autocull
     VkRect2D voxelizerScissor{};
-    voxelizerScissor.extent = {static_cast<uint32_t>(voxelizerConstants.resolution.x+2), static_cast<uint32_t>(voxelizerConstants.resolution.x+2)};
+    voxelizerScissor.extent = {static_cast<uint32_t>(voxelizerConstants.resolution.x+padding), static_cast<uint32_t>(voxelizerConstants.resolution.x+padding)};
 
     VkPipelineRasterizationConservativeStateCreateInfoEXT pipelineRasterizationConservativeStateCreateInfo{};
     pipelineRasterizationConservativeStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT;
-    pipelineRasterizationConservativeStateCreateInfo.conservativeRasterizationMode = VK_CONSERVATIVE_RASTERIZATION_MODE_OVERESTIMATE_EXT;
+    pipelineRasterizationConservativeStateCreateInfo.conservativeRasterizationMode = VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT;
     //pipelineRasterizationConservativeStateCreateInfo.extraPrimitiveOverestimationSize = 0.05f;
 
     VkPipeline voxelizerPipeline = GraphicsPipelineBuilder()
@@ -252,11 +254,11 @@ int main(int argc, char* argv[]) {
             .setRenderPass(voxelizerPass, 0)
             .build(device);
 
-    auto dummyImage = resourceManager.createImage({.imageType = VK_IMAGE_TYPE_2D, .format = VK_FORMAT_R8G8B8A8_UNORM, .extent = {static_cast<uint32_t>(voxelizerConstants.resolution.x+2), static_cast<uint32_t>(voxelizerConstants.resolution.x+2), 1}, .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_4_BIT, .tiling = VK_IMAGE_TILING_OPTIMAL, .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT}, {.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, .usage = VMA_MEMORY_USAGE_GPU_ONLY});
+    auto dummyImage = resourceManager.createImage({.imageType = VK_IMAGE_TYPE_2D, .format = VK_FORMAT_R8G8B8A8_UNORM, .extent = {static_cast<uint32_t>(voxelizerConstants.resolution.x+padding), static_cast<uint32_t>(voxelizerConstants.resolution.x+padding), 1}, .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_4_BIT, .tiling = VK_IMAGE_TILING_OPTIMAL, .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT}, {.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, .usage = VMA_MEMORY_USAGE_GPU_ONLY});
     dummyImage->createImageView({.viewType = VK_IMAGE_VIEW_TYPE_2D, .format = VK_FORMAT_R8G8B8A8_UNORM, .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0,1,0,1}});
 
     Framebuffer imagelessFramebuffer(device, voxelizerPass);
-    imagelessFramebuffer.create({dummyImage->getImageView()}, voxelizerConstants.resolution.x+2, voxelizerConstants.resolution.x+2);
+    imagelessFramebuffer.create({dummyImage->getImageView()}, voxelizerConstants.resolution.x+padding, voxelizerConstants.resolution.x+padding);
 
 
 

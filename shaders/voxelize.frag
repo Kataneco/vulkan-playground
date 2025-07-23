@@ -4,7 +4,7 @@ precision highp int;
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
 layout(location = 2) in vec3 texCoord_priority;
-layout(location = 3) in vec3 root;
+layout(location = 3) in vec3 groot;
 
 struct Node {
     int parent;
@@ -39,8 +39,9 @@ layout(push_constant) uniform VoxelizerData {
 
 int findOrCreateVoxel(ivec3 voxelPosition, uint depth, uint maxDepth) {
     //int nodeIndex = 0;
-    float desu = data.resolution.z*0.5;
-    int rootIndex = int((root.x+desu)+(root.y+desu)*data.resolution.z+(root.z+desu)*data.resolution.z*data.resolution.z);
+    int desu = int(data.resolution.z);
+    ivec3 root = voxelPosition/int(data.resolution.x);
+    int rootIndex = (root.x)+(root.y)*desu+(root.z)*desu*desu;
     int nodeIndex = rootIndex;
 
     for (uint currentDepth = 0; currentDepth < depth; ++currentDepth) {
@@ -106,8 +107,8 @@ void main() {
     ivec2 pixel = ivec2(floor(gl_FragCoord.xy));
     //if(pixel.x == 0 || pixel.y == 0 || pixel.x == int(data.resolution.x)+1 || pixel.y == int(data.resolution.x)+1) return;
 
-    ivec3 voxelPosition = ivec3(floor(position / data.resolution.y + 0.5));
-    if(any(lessThan(voxelPosition, ivec3(0))) || any(greaterThanEqual(voxelPosition, ivec3(int(data.resolution.x))))) return;
+    ivec3 voxelPosition = ivec3(floor(position/(data.resolution.y*data.resolution.z)));
+    //if(any(lessThan(voxelPosition, ivec3(0))) || any(greaterThanEqual(voxelPosition, ivec3(int(data.resolution.x))))) return;
 
     uint depth = uint(ceil(log2(data.resolution.x)));
     int voxelPointer = findOrCreateVoxel(voxelPosition, depth, depth);
