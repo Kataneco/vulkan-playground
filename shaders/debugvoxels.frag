@@ -52,6 +52,7 @@ int findVoxel(ivec3 voxelPosition, uint depth, uint maxDepth, out uint lastDepth
     //voxelPosition %= int(data.resolution.x);
 
     for (uint currentDepth = 0; currentDepth < depth; ++currentDepth) {
+        lastDepth = currentDepth+1;
         uint shift = maxDepth - currentDepth - 1;
         uint childIndex = 0;
         if (((voxelPosition.x >> shift) & 1) != 0) childIndex |= 1;
@@ -158,7 +159,7 @@ void main() {
     // DDA algorithm for fast voxel traversal
     for(int steps = 0; steps < MAX_STEPS; steps++) {
         // Check current voxel
-        uint lastDepth = maxDepth-1;
+        uint lastDepth = maxDepth;
         if(all(greaterThanEqual(mapPos, ivec3(0))) && all(lessThan(mapPos, ivec3(voxelGridSize)))) {
             int idx = findVoxel(mapPos, maxDepth, maxDepth, lastDepth);
 
@@ -182,20 +183,25 @@ void main() {
                 hitcount++;
                 outColor += vec4(color, 1.0);
 
-                float t = float(steps)/float(MAX_STEPS);
-                outColor = vec4(hsv2rgb(vec3(1.0-t,1.0,1.0)), 1.0);
-                hitcount = 1;
+                //float t = float(steps)/float(MAX_STEPS);
+                //outColor = vec4(hsv2rgb(vec3(1.0-t,1.0,1.0)), 1.0);
+                //hitcount = 1;
 
                 break;
             }
         }
+        
+        int skip = 1 << (maxDepth-lastDepth);
+        ivec3 razor = mapPos/skip;
 
-        // Find next voxel boundary
-        bvec3 mask = lessThanEqual(sideDist.xyz, min(sideDist.yzx, sideDist.zxy));
+        while(razor == mapPos/skip) {
+            // Find next voxel boundary
+            vec3 mask = vec3(lessThanEqual(sideDist.xyz, min(sideDist.yzx, sideDist.zxy)));
 
-        // Advance ray to next voxel
-        sideDist += vec3(mask) * deltaDist;
-        mapPos += ivec3(vec3(mask)) * rayStep;
+            // Advance ray to next voxel
+            sideDist += (mask) * deltaDist;
+            mapPos += ivec3((mask)) * rayStep;
+        }
 
         // Exit if outside grid bounds
         if(any(lessThan(mapPos, ivec3(0))) || any(greaterThanEqual(mapPos, ivec3(voxelGridSize)))

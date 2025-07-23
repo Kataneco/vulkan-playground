@@ -28,6 +28,10 @@ vec3 rootOrigin(vec3 root) {
     return (root+0.5)*data.resolution.y;
 }
 
+vec3 rootBegin(vec3 r) {
+    return r*data.resolution.y;
+}
+
 void main() {
     vec3 u = gl_in[1].gl_Position.xyz-gl_in[0].gl_Position.xyz;
     vec3 v = gl_in[2].gl_Position.xyz-gl_in[0].gl_Position.xyz;
@@ -63,7 +67,7 @@ void main() {
 
         gl_Position.z = abs(gl_Position.z);
         //gl_Position.z = 1.0f;
-        outPosition = ((gl_in[i].gl_Position.xyz-rootOrigin(root))+(vec3(data.resolution.y/2)))*data.resolution.x-1;
+        outPosition = ((gl_in[i].gl_Position.xyz-rootBegin(vec3(0)))+(vec3(data.resolution.y*0.5*data.resolution.z)))*(data.resolution.x*data.resolution.z-1);
         //outNormal = normals[i];
         outNormal = facenormal;
         outTexCoord_outPriority = vec3(texCoords[i], priority((length(u)+1+length(v)+1)*(length(w)+1)));
