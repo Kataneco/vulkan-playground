@@ -107,8 +107,15 @@ void main() {
     ivec2 pixel = ivec2(floor(gl_FragCoord.xy));
     //if(pixel.x == 0 || pixel.y == 0 || pixel.x == int(data.resolution.x)+1 || pixel.y == int(data.resolution.x)+1) return;
 
-    ivec3 voxelPosition = ivec3(floor(position/(data.resolution.y*data.resolution.z)));
+    //ivec3 voxelPosition = ivec3(floor(position/(data.resolution.y*data.resolution.z)));
+    // Calculate voxel position directly from world position
+ivec3 voxelPosition = ivec3(floor((position + vec3(data.resolution.z * data.resolution.y * 0.5)) / data.resolution.y * data.resolution.x));
     //if(any(lessThan(voxelPosition, ivec3(0))) || any(greaterThanEqual(voxelPosition, ivec3(int(data.resolution.x))))) return;
+
+        if(any(lessThan(voxelPosition, ivec3(0))) || 
+       any(greaterThanEqual(voxelPosition, ivec3(int(data.resolution.x*data.resolution.z))))) {
+        discard;
+    }
 
     uint depth = uint(ceil(log2(data.resolution.x)));
     int voxelPointer = findOrCreateVoxel(voxelPosition, depth, depth);
