@@ -154,7 +154,7 @@ int main(int argc, char* argv[]) {
         {512, 1, 2}
     };
 
-    uint32_t padding = 0;
+    uint32_t padding = log2(voxelizerConstants.resolution.x);
 
     uint64_t zero = 0;
     //uint64_t one = 1;
@@ -242,7 +242,7 @@ int main(int argc, char* argv[]) {
 
     VkPipelineRasterizationConservativeStateCreateInfoEXT pipelineRasterizationConservativeStateCreateInfo{};
     pipelineRasterizationConservativeStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT;
-    pipelineRasterizationConservativeStateCreateInfo.conservativeRasterizationMode = VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT;
+    pipelineRasterizationConservativeStateCreateInfo.conservativeRasterizationMode = VK_CONSERVATIVE_RASTERIZATION_MODE_OVERESTIMATE_EXT;
     //pipelineRasterizationConservativeStateCreateInfo.extraPrimitiveOverestimationSize = 0.05f;
 
     VkPipeline voxelizerPipeline = GraphicsPipelineBuilder()

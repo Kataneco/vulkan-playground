@@ -46,17 +46,17 @@ void main() {
     rb=posToRoot(gl_in[1].gl_Position.xyz);
     rc=posToRoot(gl_in[2].gl_Position.xyz);
 
-    vec3 minRoot = min(min(ra, rb), rc);
-    minRoot = clamp(minRoot, vec3(-data.resolution.z*0.5), vec3(data.resolution.z*0.5-1.0));
-    vec3 maxRoot = max(max(ra, rb), rc);
-    maxRoot = clamp(maxRoot, vec3(-data.resolution.z*0.5), vec3(data.resolution.z*0.5-1.0));
-    
+    // Remove or relax the clamping
+vec3 minRoot = min(min(ra, rb), rc);
+vec3 maxRoot = max(max(ra, rb), rc);
+// Only clamp to absolute bounds if necessary
+
     for(float z = minRoot.z; z <= maxRoot.z; z+=1.0)
     for(float y = minRoot.y; y <= maxRoot.y; y+=1.0)
     for(float x = minRoot.x; x <= maxRoot.x; x+=1.0) {
     for (uint i = 0; i < 3; i++) {
         vec3 root = vec3(x,y,z);
-        gl_Position = vec4(((gl_in[i].gl_Position.xyz)-rootOrigin(root))/(data.resolution.y/2), 1.0);
+        gl_Position = vec4(((gl_in[i].gl_Position.xyz)-rootOrigin(root))/(data.resolution.y*0.5070), 1.0);
 
         if (maxi == 0) {
             gl_Position.xyz = gl_Position.zyx;
@@ -65,9 +65,11 @@ void main() {
             gl_Position.xyz = gl_Position.xzy;
         }
 
-        gl_Position.z = abs(gl_Position.z);
-        //gl_Position.z = 1.0f;
-        outPosition = ((gl_in[i].gl_Position.xyz-rootBegin(vec3(0)))+(vec3(data.resolution.y*0.5*data.resolution.z)))*(data.resolution.x*data.resolution.z-1);
+        //gl_Position.z = abs(gl_Position.z);
+        gl_Position.z = 0.5f;
+        //outPosition = ((gl_in[i].gl_Position.xyz-rootBegin(vec3(0)))+(vec3(data.resolution.y*0.5*data.resolution.z)))*(data.resolution.x*data.resolution.z-1);
+        // Simplified position calculation
+outPosition = gl_in[i].gl_Position.xyz;
         //outNormal = normals[i];
         outNormal = facenormal;
         outTexCoord_outPriority = vec3(texCoords[i], priority((length(u)+1+length(v)+1)*(length(w)+1)));
