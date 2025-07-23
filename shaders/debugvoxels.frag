@@ -52,8 +52,6 @@ int findVoxel(ivec3 voxelPosition, uint depth, uint maxDepth, out uint lastDepth
     //voxelPosition %= int(data.resolution.x);
 
     for (uint currentDepth = 0; currentDepth < depth; ++currentDepth) {
-        lastDepth = currentDepth;
-
         uint shift = maxDepth - currentDepth - 1;
         uint childIndex = 0;
         if (((voxelPosition.x >> shift) & 1) != 0) childIndex |= 1;
@@ -89,6 +87,12 @@ int findVoxel(ivec3 voxelPosition, uint depth, uint maxDepth, out uint lastDepth
 
 vec3 worldToGrid(vec3 pos) {
     return pos-vec3(-data.resolution.y*data.resolution.z*0.5)+data.center;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
 }
 
 void main() {
@@ -177,11 +181,14 @@ void main() {
 
                 hitcount++;
                 outColor += vec4(color, 1.0);
-                if(unpackUnorm4x8(voxels[-idx-1].color).w != 1) break;
+
+                float t = float(steps)/float(MAX_STEPS);
+                outColor = vec4(hsv2rgb(vec3(1.0-t,1.0,1.0)), 1.0);
+                hitcount = 1;
+
+                break;
             }
         }
-
-        uint skip = 1u << ((maxDepth-lastDepth)-1);
 
         // Find next voxel boundary
         bvec3 mask = lessThanEqual(sideDist.xyz, min(sideDist.yzx, sideDist.zxy));
@@ -194,8 +201,8 @@ void main() {
         if(any(lessThan(mapPos, ivec3(0))) || any(greaterThanEqual(mapPos, ivec3(voxelGridSize)))
         || steps == MAX_STEPS - 1) {
             // Optional: Use a gradient based on ray travel distance for nice background
-            float t = length(vec3(mapPos) / voxelGridSize);
-            outColor = vec4(mix(backgroundColor, vec3(0.12, 0.0, 0.12), t), 1.0);
+            float t = float(steps)/float(MAX_STEPS);
+            outColor = vec4(hsv2rgb(vec3(1.0-t,1.0,1.0)), 1.0);
             break;
         }
     }
