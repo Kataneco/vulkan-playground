@@ -13,11 +13,11 @@ layout(set = 0, binding = 0) uniform ObjectData {
 
 layout(push_constant) uniform VoxelizerData {
     vec3 center;
-    vec3 resolution; // x: dimensions^3, y: unit length, z: unassigned
+    vec3 resolution; // x: dimensions^3, y: unit length, z: root grid dimensions^3
 } data;
 
 void main() {
-    gl_Position = objectData.model * vec4(position, 1);
+    gl_Position = (objectData.model * vec4(position, 1));
     outNormal = normal;
-    outTexCoord = vec2(gl_InstanceIndex); //TODO temp
+    outTexCoord = texCoord; //vec2(gl_InstanceIndex); //TODO temp
 }

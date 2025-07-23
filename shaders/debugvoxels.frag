@@ -41,7 +41,7 @@ layout(push_constant) uniform VoxelizerData {
 
 layout(location = 0) out vec4 outColor;
 
-int findVoxel(ivec3 voxelPosition, uint depth, uint maxDepth) {
+int findVoxel(ivec3 voxelPosition, uint depth, uint maxDepth, out uint lastDepth) {
     //int nodeIndex = 0;
     int desu = int(data.resolution.z);
     ivec3 root = voxelPosition/int(data.resolution.x);
@@ -49,16 +49,18 @@ int findVoxel(ivec3 voxelPosition, uint depth, uint maxDepth) {
     int nodeIndex = rootIndex;
 
     // Formality for resolutions not power of two
-    voxelPosition %= int(data.resolution.x);
+    //voxelPosition %= int(data.resolution.x);
 
     for (uint currentDepth = 0; currentDepth < depth; ++currentDepth) {
+        lastDepth = currentDepth;
+
         uint shift = maxDepth - currentDepth - 1;
         uint childIndex = 0;
         if (((voxelPosition.x >> shift) & 1) != 0) childIndex |= 1;
         if (((voxelPosition.y >> shift) & 1) != 0) childIndex |= 2;
         if (((voxelPosition.z >> shift) & 1) != 0) childIndex |= 4;
 
-        int childPointer = atomicAdd(nodes[nodeIndex].children[childIndex], 0);
+        int childPointer = (nodes[nodeIndex].children[childIndex]);
 
         if (childPointer == 0) {
             return nodeIndex;
@@ -76,7 +78,7 @@ int findVoxel(ivec3 voxelPosition, uint depth, uint maxDepth) {
     if (((voxelPosition.y >> shift) & 1) != 0) childIndex |= 2;
     if (((voxelPosition.z >> shift) & 1) != 0) childIndex |= 4;
 
-    int childPointer = atomicAdd(nodes[nodeIndex].children[childIndex], 0);
+    int childPointer = (nodes[nodeIndex].children[childIndex]);
 
     if (childPointer == 0) {
         return nodeIndex;
@@ -142,18 +144,19 @@ void main() {
 
     // Variables to track ray traversal
     bool hitVoxel = false;
-    vec3 normal = vec3(0.0);
 
     // Maximum number of steps to prevent infinite loops
-    const int MAX_STEPS = 1024; // Increased for dense grid
+    const int MAX_STEPS = 512; // Increased for dense grid
 
     int hitcount = 0;
+    uint maxDepth = uint(log2(data.resolution.x));
 
     // DDA algorithm for fast voxel traversal
     for(int steps = 0; steps < MAX_STEPS; steps++) {
         // Check current voxel
+        uint lastDepth = maxDepth-1;
         if(all(greaterThanEqual(mapPos, ivec3(0))) && all(lessThan(mapPos, ivec3(voxelGridSize)))) {
-            int idx = findVoxel(mapPos, uint(log2(data.resolution.x)), uint(log2(data.resolution.x)));
+            int idx = findVoxel(mapPos, maxDepth, maxDepth, lastDepth);
 
             if(idx < 0) {
                 // Hit a voxel!
@@ -178,15 +181,14 @@ void main() {
             }
         }
 
+        uint skip = 1u << ((maxDepth-lastDepth)-1);
+
         // Find next voxel boundary
         bvec3 mask = lessThanEqual(sideDist.xyz, min(sideDist.yzx, sideDist.zxy));
 
         // Advance ray to next voxel
         sideDist += vec3(mask) * deltaDist;
         mapPos += ivec3(vec3(mask)) * rayStep;
-
-        // Update normal based on which face was hit
-        normal = -vec3(mask) * vec3(rayStep);
 
         // Exit if outside grid bounds
         if(any(lessThan(mapPos, ivec3(0))) || any(greaterThanEqual(mapPos, ivec3(voxelGridSize)))

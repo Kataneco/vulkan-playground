@@ -2,6 +2,8 @@
 #include "Engine.h"
 #include <random>
 
+#include "src/experimental/voxelizer.h"
+
 int main(int argc, char* argv[]) {
     std::cout << "Haii wurld!! :3" << std::endl;
     srand(time(nullptr));
@@ -91,8 +93,8 @@ int main(int argc, char* argv[]) {
         framebuffers.back().create({swapchain.getImageViews()[i], depthImage->getImageView()}, swapchain.getExtent().width, swapchain.getExtent().height);
     }
 
-    auto vertCode = readFile("shaders/voxeldisplay.vert.spv");
-    auto fragCode = readFile("shaders/voxeldisplay.frag.spv");
+    auto vertCode = readFile("shaders/fullscreenQuad.vert.spv");
+    auto fragCode = readFile("shaders/debugvoxels.frag.spv");
     ShaderModule vertModule(device, vertCode), fragModule(device, fragCode);
     ShaderReflection vertexShader(vertCode), fragmentShader(fragCode);
     VkPipelineLayout pipelineLayout = pipelineLayoutCache.createPipelineLayout(vertexShader+fragmentShader);
@@ -129,6 +131,8 @@ int main(int argc, char* argv[]) {
 
     std::vector<CommandBuffer> commandBuffers = commandPool.allocateCommandBuffers(swapchain.getImageCount());
 
+
+
     //Experimental
     Mesh dragon = Mesh::loadObj("/home/honeywrap/Documents/kitten/assets/bunny.obj");
     dragon.pushMesh(resourceManager, stagingBufferManager);
@@ -138,26 +142,27 @@ int main(int argc, char* argv[]) {
 
     auto objectData = resourceManager.createBuffer({.size = sizeof(glm::mat4x4)*1024, .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT});
 
+    auto cameraData = resourceManager.createBuffer({.size = sizeof(glm::mat4x4)*2, .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT});
+
     auto voxelBuffer = resourceManager.createBuffer({.size = sizeof(Voxel)*1024*1024*6, .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT});
     auto svoBuffer = resourceManager.createBuffer({.size = sizeof(OctreeNode)*1024*1024*6, .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT});
     auto voxelCountBuffer = resourceManager.createBuffer({.size = sizeof(uint64_t), .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT}); //Atomix
     auto nodeCountBuffer = resourceManager.createBuffer({.size = sizeof(uint64_t), .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT}); //Atomix
 
-    auto voxelDrawIndirectBuffer = resourceManager.createBuffer({.size = sizeof(VkDrawIndirectCommand), .usage = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT});
-    VkDrawIndirectCommand drawIndirectCommand{
-        36,
-        0,
-        0,
-        0
+    VoxelizerData voxelizerConstants{
+        {0,0,0},
+        {512, 1, 8}
     };
 
     uint64_t zero = 0;
-    uint64_t one = 1;
-    one <<= 32;
-    one += 1;
+    //uint64_t one = 1;
+    //one <<= 32;
+    //one += 1;
+    uint64_t nodeCount = voxelizerConstants.resolution.z*voxelizerConstants.resolution.z*voxelizerConstants.resolution.z;
+    nodeCount <<= 32;
+    nodeCount += voxelizerConstants.resolution.z*voxelizerConstants.resolution.z*voxelizerConstants.resolution.z;
     stagingBufferManager.stageBufferData(&zero, voxelCountBuffer->getBuffer(), sizeof(zero));
-    stagingBufferManager.stageBufferData(&one, nodeCountBuffer->getBuffer(), sizeof(one));
-    stagingBufferManager.stageBufferData(&drawIndirectCommand, voxelDrawIndirectBuffer->getBuffer(), sizeof(drawIndirectCommand));
+    stagingBufferManager.stageBufferData(&nodeCount, nodeCountBuffer->getBuffer(), sizeof(nodeCount));
     stagingBufferManager.flush();
 
     VkDescriptorBufferInfo voxelDataSetInfos[] = {
@@ -187,12 +192,12 @@ int main(int argc, char* argv[]) {
     DescriptorBuilder(descriptorLayoutCache, descriptorAllocator)
             .bind_buffer(0, &bunnySetInfo, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)
             .build(bunnySet);
-
-    //Voxeldisplay exclusive
-    VkDescriptorSet voxeldisplayDataSet;
+            
+    VkDescriptorSet cameraSet;
+    VkDescriptorBufferInfo cameraSetInfo = {cameraData->getBuffer(), 0, sizeof(glm::mat4x4)*2};
     DescriptorBuilder(descriptorLayoutCache, descriptorAllocator)
-            .bind_buffer(0, &voxelDataSetInfos[1], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)
-            .build(voxeldisplayDataSet);
+            .bind_buffer(0, &cameraSetInfo, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT)
+            .build(cameraSet);
 
     //Experimental
     auto voxelVertCode = readFile("shaders/voxelize.vert.spv");
@@ -222,25 +227,21 @@ int main(int argc, char* argv[]) {
     dummyAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
     voxelizerPass.create({dummyAttachment}, {voxelizerSubpass}, {});
-
-    VoxelizerData voxelizerConstants{
-        {0,0,0},
-        {512, 4, 0}
-    };
-
+    
     VkViewport voxelizerViewport{};
     voxelizerViewport.width = voxelizerConstants.resolution.x+2;
     voxelizerViewport.height = voxelizerConstants.resolution.x+2;
     voxelizerViewport.minDepth = 0.0f;
     voxelizerViewport.maxDepth = 1.0f;
 
+    //TODO Use to autocull
     VkRect2D voxelizerScissor{};
     voxelizerScissor.extent = {static_cast<uint32_t>(voxelizerConstants.resolution.x+2), static_cast<uint32_t>(voxelizerConstants.resolution.x+2)};
 
     VkPipelineRasterizationConservativeStateCreateInfoEXT pipelineRasterizationConservativeStateCreateInfo{};
     pipelineRasterizationConservativeStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT;
     pipelineRasterizationConservativeStateCreateInfo.conservativeRasterizationMode = VK_CONSERVATIVE_RASTERIZATION_MODE_OVERESTIMATE_EXT;
-    pipelineRasterizationConservativeStateCreateInfo.extraPrimitiveOverestimationSize = 0.0f;
+    //pipelineRasterizationConservativeStateCreateInfo.extraPrimitiveOverestimationSize = 0.05f;
 
     VkPipeline voxelizerPipeline = GraphicsPipelineBuilder()
             .setShaders(voxelVertModule, voxelGeomModule, voxelFragModule)
@@ -257,31 +258,8 @@ int main(int argc, char* argv[]) {
     Framebuffer imagelessFramebuffer(device, voxelizerPass);
     imagelessFramebuffer.create({dummyImage->getImageView()}, voxelizerConstants.resolution.x+2, voxelizerConstants.resolution.x+2);
 
-    VkDescriptorSet raymarchDataSet;
-    DescriptorBuilder(descriptorLayoutCache, descriptorAllocator)
-            .bind_buffer(0, &voxelDataSetInfos[0], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT)
-            .bind_buffer(1, &voxelDataSetInfos[1], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT)
-            .bind_buffer(2, &voxelDataSetInfos[2], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT)
-            .bind_buffer(3, &voxelDataSetInfos[3], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT)
-            .build(raymarchDataSet);
 
-    //Experimental: ray marching
-    auto fullscreenQuadCode = readFile("shaders/fullscreenQuad.vert.spv");
-    auto raymarchCode = readFile("shaders/raymarch.frag.spv");
-    ShaderModule fullscreenQuadModule(device, fullscreenQuadCode), raymarchModule(device, raymarchCode);
-    ShaderReflection fullscreenQuadShader(fullscreenQuadCode), raymarchShader(raymarchCode);
-    VkPipelineLayout raymarchLayout = pipelineLayoutCache.createPipelineLayout(raymarchShader+fullscreenQuadShader);
 
-    VkPipeline raymarch = GraphicsPipelineBuilder()
-            .setShaders(fullscreenQuadModule, raymarchModule)
-            .setViewportState(viewport, scissor)
-            .setRasterizationState(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE, 1.0f)
-            .setColorBlendState({noBlend})
-            .setDepthStencilState(VK_FALSE, VK_FALSE, VK_COMPARE_OP_LESS)
-            .setLayout(raymarchLayout)
-            .setRenderPass(renderPass, 0)
-            .setDynamicState({VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR})
-            .build(device);
 
     //Main rendering loop
     uint32_t frame = 0;
@@ -298,17 +276,21 @@ int main(int argc, char* argv[]) {
     float yaw = 0.0f, pitch = 0.0f;
     glm::vec3 camera = {0.0f, 0.0f, -1.0f};
     bool focus = true;
+    float timeDebug = 1.0f;
     while (!window.windowShouldClose()) {
         window.pollEvents(); //TODO bad design
         if (window.windowIconified()) continue; //Pause rendering if minimized
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
             focus = false;
-        } //Exit button //Not really anymore
+        }
         if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
             focus = true;
         }
+
+        if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS) timeDebug = 0.0;
+        else timeDebug = 1.0;
 
         // Delta time
         currentFrame = glfwGetTime();
@@ -354,22 +336,25 @@ int main(int argc, char* argv[]) {
         glm::mat4 view = glm::lookAt(camera, camera+glm::normalize(direction), glm::vec3(0,1,0));
         glm::mat4 projection = glm::perspective(glm::radians(90.0f), (float)swapchain.getExtent().width/(float)swapchain.getExtent().height, 0.01f, 1000.0f);
         projection[1][1] *= -1;
-        glm::mat4 unified = projection*view;
 
         commandBuffer.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
+
+
         //Experimental
-        glm::mat4 model = glm::scale(glm::vec3(1.0f,1.0f,1.0f))*glm::translate(glm::vec3(-0.5,0,0.5f))*glm::rotate(glm::radians(time*50.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        glm::mat4 model = glm::scale(glm::vec3(1.0f,1.0f,1.0f))*glm::translate(glm::vec3(-0.5,0,0.5f))*glm::rotate(glm::radians(time*50.0f*timeDebug), glm::vec3(0.0f, 1.0f, 0.0f));
         glm::mat4 modelb = glm::scale(glm::vec3(1.0f,1.0f,1.0f)*0.3f)*glm::rotate(glm::radians(time*-1.0f), glm::vec3(0.0f, 1.0f, 0.0f))*glm::translate(glm::vec3(3,1,0));
         stagingBufferManager.stageBufferData(&model, objectData->getBuffer(), sizeof(glm::mat4));
         stagingBufferManager.stageBufferData(&modelb, objectData->getBuffer(), sizeof(glm::mat4), sizeof(glm::mat4));
+        stagingBufferManager.stageBufferData(&view, cameraData->getBuffer(), sizeof(view));
+        stagingBufferManager.stageBufferData(&projection, cameraData->getBuffer(), sizeof(projection), sizeof(view));
         stagingBufferManager.flush();
 
         voxelizerPass.begin(commandBuffer, imagelessFramebuffer, voxelizerScissor, {});
 
         commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerPipeline);
         commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerPipelineLayout, 1, {voxelizerDataSet});
-        commandBuffer.pushConstants(voxelizerPipelineLayout, VK_SHADER_STAGE_GEOMETRY_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(voxelizerConstants), &voxelizerConstants);
+        commandBuffer.pushConstants(voxelizerPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_GEOMETRY_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(voxelizerConstants), &voxelizerConstants);
 
         commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerPipelineLayout, 0, {dragonSet});
         commandBuffer.bindVertexBuffers(0, {dragon.vertexBuffer->getBuffer()}, {0});
@@ -383,38 +368,30 @@ int main(int argc, char* argv[]) {
 
         voxelizerPass.end(commandBuffer);
 
-        ResourceBarrier::bufferMemoryBarrier(commandBuffer, voxelCountBuffer->getBuffer(), sizeof(uint32_t), sizeof(uint32_t), VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
-        VkBufferCopy vcUpdate{};
-        vcUpdate.size = sizeof(uint32_t);
-        vcUpdate.srcOffset = 0;
-        vcUpdate.dstOffset = sizeof(uint32_t);
-        vkCmdCopyBuffer(commandBuffer, voxelCountBuffer->getBuffer(), voxelDrawIndirectBuffer->getBuffer(), 1, &vcUpdate);
-
-        ResourceBarrier::bufferMemoryBarrier(commandBuffer, voxelDrawIndirectBuffer->getBuffer(), sizeof(uint32_t), sizeof(uint32_t), VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT);
 
         renderPass.begin(commandBuffer, framebuffers[swapchainIndex], scissor, {{.color = {0.0f, 0.0f, 0.0f, 0.0f}}, {.depthStencil = {1.0f, 0}}});
 
         vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
-
-        //Expierimental: raymarch
-        commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, raymarch);
-        commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, raymarchLayout, 0, {voxelizerDataSet});
-        glm::mat4 invproj = glm::inverse(projection), invview = glm::inverse(view);
-        glm::ivec2 res(swapchain.getExtent().width, swapchain.getExtent().height);
-        commandBuffer.pushConstants(raymarchLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(glm::mat4), &invview);
-        commandBuffer.pushConstants(raymarchLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(glm::mat4), sizeof(glm::mat4), &invproj);
-        commandBuffer.pushConstants(raymarchLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(glm::mat4)*2, sizeof(glm::ivec2), &res);
+        
+        //Experimental
+        commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+        commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, {cameraSet, voxelizerDataSet});
+        commandBuffer.pushConstants(pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(voxelizerConstants), &voxelizerConstants);
+        
+        glm::vec4 res(swapchain.getExtent().width, swapchain.getExtent().height, 0, 0);
+        commandBuffer.pushConstants(pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(voxelizerConstants), sizeof(res), &res);
         vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
         renderPass.end(commandBuffer);
 
+        //Experimental
         ResourceBarrier::bufferMemoryBarrier(commandBuffer, voxelCountBuffer->getBuffer(), 0, sizeof(uint64_t), VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_TRANSFER_WRITE_BIT);
 
         commandBuffer.fillBuffer(voxelCountBuffer->getBuffer(), 0, VK_WHOLE_SIZE, 0);
 
-        commandBuffer.fillBuffer(nodeCountBuffer->getBuffer(), 0, VK_WHOLE_SIZE, 1);
+        commandBuffer.fillBuffer(nodeCountBuffer->getBuffer(), 0, VK_WHOLE_SIZE, voxelizerConstants.resolution.z*voxelizerConstants.resolution.z*voxelizerConstants.resolution.z);
         commandBuffer.fillBuffer(svoBuffer->getBuffer(), 0, VK_WHOLE_SIZE, 0);
 
         commandBuffer.end();
@@ -446,7 +423,6 @@ int main(int argc, char* argv[]) {
 
     device.waitIdle();
 
-    vkDestroyPipeline(device, raymarch, nullptr);
     vkDestroyPipeline(device, voxelizerPipeline, nullptr);
     vkDestroyPipeline(device, pipeline, nullptr);
     //Window::terminate();
