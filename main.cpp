@@ -134,7 +134,7 @@ int main(int argc, char* argv[]) {
 
 
     //Experimental
-    Mesh dragon = Mesh::loadObj("/home/honeywrap/Documents/kitten/assets/bunny.obj");
+    Mesh dragon = Mesh::loadObj("/home/honeywrap/Documents/kitten/assets/dragon.obj");
     dragon.pushMesh(resourceManager, stagingBufferManager);
 
     Mesh bunny = Mesh::loadObj("/home/honeywrap/Documents/kitten/assets/bunny.obj");
@@ -144,14 +144,14 @@ int main(int argc, char* argv[]) {
 
     auto cameraData = resourceManager.createBuffer({.size = sizeof(glm::mat4x4)*2, .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT});
 
-    auto voxelBuffer = resourceManager.createBuffer({.size = sizeof(Voxel)*1024*1024*6, .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT});
-    auto svoBuffer = resourceManager.createBuffer({.size = sizeof(OctreeNode)*1024*1024*6, .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT});
+    auto voxelBuffer = resourceManager.createBuffer({.size = sizeof(Voxel)*1024*1024*64, .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT});
+    auto svoBuffer = resourceManager.createBuffer({.size = sizeof(OctreeNode)*1024*1024*64, .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT});
     auto voxelCountBuffer = resourceManager.createBuffer({.size = sizeof(uint64_t), .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT}); //Atomix
     auto nodeCountBuffer = resourceManager.createBuffer({.size = sizeof(uint64_t), .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT}); //Atomix
 
     VoxelizerData voxelizerConstants{
         {0,0,0},
-        {512, 1, 2}
+        {256, 1, 4}
     };
 
     uint32_t padding = log2(voxelizerConstants.resolution.x);

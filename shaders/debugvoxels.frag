@@ -183,9 +183,9 @@ void main() {
                 hitcount++;
                 outColor += vec4(color, 1.0);
 
-                //float t = float(steps)/float(MAX_STEPS);
-                //outColor = vec4(hsv2rgb(vec3(1.0-t,1.0,1.0)), 1.0);
-                //hitcount = 1;
+                float t = float(steps)/float(MAX_STEPS);
+                outColor = vec4(hsv2rgb(vec3(0.7-t*4.14,1.0,1.0)), 1.0);
+                hitcount = 1;
 
                 break;
             }
@@ -208,7 +208,7 @@ void main() {
         || steps == MAX_STEPS - 1) {
             // Optional: Use a gradient based on ray travel distance for nice background
             float t = float(steps)/float(MAX_STEPS);
-            outColor = vec4(hsv2rgb(vec3(1.0-t,1.0,1.0)), 1.0);
+            outColor = vec4(hsv2rgb(vec3(0.7-t*4.14,1.0,1.0)), 1.0);
             break;
         }
     }
