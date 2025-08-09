@@ -9,9 +9,9 @@
 struct Texture {
     int width, height, channels;
     std::vector<uint8_t> pixels;
-    //std::shared_ptr<Image> image;
-    //std::shared_ptr<Sampler> sampler;
+    std::shared_ptr<Image> image;
+    std::shared_ptr<Sampler> sampler;
 
     static Texture loadImage(const std::string &filePath);
-    //void pushTexture(ResourceManager &resourceManager, StagingBufferManager &stagingBufferManager);
+    void pushTexture(ResourceManager &resourceManager, StagingBufferManager &stagingBufferManager);
 };

@@ -3,6 +3,9 @@ precision highp int;
 
 struct Node {
     int parent;
+    int occlusion; // amount of total children
+    int emission; // pointer to voxel that sums up all child voxels
+    uint generation; // node age
     int children[8];
 };
 
@@ -30,6 +33,10 @@ layout(std430, set = 1, binding = 2) buffer NodeCountBuffer {
 
 layout(std430, set = 1, binding = 3) buffer NodeBuffer {
     Node nodes[];
+};
+
+layout(std430, set = 1, binding = 4) buffer NodeGenerationBuffer {
+    uint nodeGeneration;
 };
 
 layout(push_constant) uniform VoxelizerData {
@@ -65,8 +72,9 @@ int findVoxel(ivec3 voxelPosition, uint depth, uint maxDepth, out uint lastDepth
             return nodeIndex;
         }
 
-        if (childPointer < 0)
-        return childPointer;
+        if (childPointer < 0) {
+            return childPointer;
+        }
 
         nodeIndex = childPointer;
     }
@@ -154,7 +162,7 @@ void main() {
     const int maxSteps = 256;
 
     for (int step = 0; step < maxSteps && t < maxT; ++step) {
-        //outColor.rgb = hsv2rgb(vec3(float(step)/maxSteps, 1.0, 1.0));
+        outColor.rgb = hsv2rgb(vec3(float(step)/maxSteps, 1.0, 1.0));
 
         vec3 rayPos = rayOrigin + rayDirection * t;
         vec3 gridPos = worldToGrid(rayPos);
@@ -184,6 +192,6 @@ void main() {
 
         vec2 tNode = IntersectAABB(rayOrigin, invRayDirection, bbMin, bbMax);
 
-        t = tNode.y + stepSize * 0.0001;
+        t = tNode.y + stepSize * 0.001;
     }
 }
