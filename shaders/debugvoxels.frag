@@ -118,7 +118,7 @@ void main() {
     // Gay ass shit
     vec3 backgroundColor = vec3(0.1, 0.1, 0.2);
     outColor = vec4(backgroundColor, 1.0);
-    
+
     // matrix inversion for ray prep
     mat4 invView = inverse(camera.view);
     mat4 invProjection = inverse(camera.projection);
@@ -205,7 +205,7 @@ void main() {
                 break;
             }
         }
-        
+
         int skip = 1 << (maxDepth-lastDepth);
         ivec3 razor = mapPos/skip;
 
