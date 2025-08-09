@@ -20,5 +20,5 @@ void main() {
     gl_Position = (objectData.model * vec4(position, 1));
     gl_Position /= gl_Position.w;
     outNormal = normal;
-    outTexCoord = texCoord; //vec2(gl_InstanceIndex); //TODO temp
+    outTexCoord = texCoord;
 }
