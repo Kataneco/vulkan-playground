@@ -134,11 +134,23 @@ int main(int argc, char* argv[]) {
 
 
     //Experimental
-    Mesh dragon = Mesh::loadObj("/home/honeywrap/Documents/kitten/assets/bunny.obj");
+    Mesh dragon = Mesh::loadObj("/home/honeywrap/Documents/kitten/assets/dragon.obj");
     dragon.pushMesh(resourceManager, stagingBufferManager);
 
     Mesh bunny = Mesh::loadObj("/home/honeywrap/Documents/kitten/assets/bunny.obj");
     bunny.pushMesh(resourceManager, stagingBufferManager);
+
+    Mesh voxelia = Mesh::loadObj("/home/honeywrap/Documents/kitten/assets/vokselia_spawn/vokselia_spawn.obj");
+    voxelia.pushMesh(resourceManager, stagingBufferManager);
+
+    Texture voxeliaTexture = Texture::loadImage("/home/honeywrap/Documents/kitten/assets/vokselia_spawn/vokselia_spawn.png");
+    voxeliaTexture.pushTexture(resourceManager, stagingBufferManager);
+
+    CommandBuffer cont = commandPool.allocateCommandBuffer();
+    cont.begin();
+    ResourceBarrier::transitionImageLayout(cont, voxeliaTexture.image->getImage(), voxeliaTexture.image->getFormat(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    cont.end();
+    cont.submit(device.getGraphicsQueue());
 
     auto objectData = resourceManager.createBuffer({.size = sizeof(glm::mat4x4)*1024, .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT});
 
@@ -148,10 +160,11 @@ int main(int argc, char* argv[]) {
     auto svoBuffer = resourceManager.createBuffer({.size = sizeof(OctreeNode)*1024*1024*64, .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT});
     auto voxelCountBuffer = resourceManager.createBuffer({.size = sizeof(uint64_t), .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT}); //Atomix
     auto nodeCountBuffer = resourceManager.createBuffer({.size = sizeof(uint64_t), .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT}); //Atomix
+    auto nodeGenerationBuffer = resourceManager.createBuffer({.size = sizeof(uint64_t), .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT}); //Atomix
 
     VoxelizerData voxelizerConstants{
         {0,0,0},
-        {256, 1, 4}
+        {128, 1.0, 8}
     };
 
     uint32_t padding = log2(voxelizerConstants.resolution.x);
@@ -171,7 +184,8 @@ int main(int argc, char* argv[]) {
             {voxelCountBuffer->getBuffer(), 0, sizeof(uint32_t)},
             {voxelBuffer->getBuffer(), 0, VK_WHOLE_SIZE},
             {nodeCountBuffer->getBuffer(), 0, sizeof(uint32_t)},
-            {svoBuffer->getBuffer(), 0, VK_WHOLE_SIZE}
+            {svoBuffer->getBuffer(), 0, VK_WHOLE_SIZE},
+            {nodeGenerationBuffer->getBuffer(), 0, sizeof(uint32_t)}
     };
 
     VkDescriptorSet voxelizerDataSet;
@@ -180,6 +194,7 @@ int main(int argc, char* argv[]) {
             .bind_buffer(1, &voxelDataSetInfos[1], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT)
             .bind_buffer(2, &voxelDataSetInfos[2], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT)
             .bind_buffer(3, &voxelDataSetInfos[3], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT)
+            .bind_buffer(4, &voxelDataSetInfos[4], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT)
             .build(voxelizerDataSet);
 
     //Object Specific
@@ -194,6 +209,14 @@ int main(int argc, char* argv[]) {
     DescriptorBuilder(descriptorLayoutCache, descriptorAllocator)
             .bind_buffer(0, &bunnySetInfo, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)
             .build(bunnySet);
+
+    VkDescriptorSet voxeliaSet;
+    VkDescriptorBufferInfo voxeliaSetInfo = {objectData->getBuffer(), sizeof(glm::mat4x4)*2, sizeof(glm::mat4x4)};
+    VkDescriptorImageInfo descriptorImageInfo = {voxeliaTexture.sampler->getSampler(), voxeliaTexture.image->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    DescriptorBuilder(descriptorLayoutCache, descriptorAllocator)
+            .bind_buffer(0, &voxeliaSetInfo, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)
+            .bind_image(1, &descriptorImageInfo, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
+            .build(voxeliaSet);
             
     VkDescriptorSet cameraSet;
     VkDescriptorBufferInfo cameraSetInfo = {cameraData->getBuffer(), 0, sizeof(glm::mat4x4)*2};
@@ -205,9 +228,11 @@ int main(int argc, char* argv[]) {
     auto voxelVertCode = readFile("shaders/voxelize.vert.spv");
     auto voxelGeomCode = readFile("shaders/voxelize.geom.spv");
     auto voxelFragCode = readFile("shaders/voxelize.frag.spv");
-    ShaderModule voxelVertModule(device, voxelVertCode), voxelGeomModule(device, voxelGeomCode), voxelFragModule(device, voxelFragCode);
-    ShaderReflection voxelVertexShader(voxelVertCode), voxelGeometryShader(voxelGeomCode), voxelFragmentShader(voxelFragCode);
+    auto voxelTextFragCode = readFile("shaders/voxelize_textured.frag.spv");
+    ShaderModule voxelVertModule(device, voxelVertCode), voxelGeomModule(device, voxelGeomCode), voxelFragModule(device, voxelFragCode), voxelTextFragModule(device, voxelTextFragCode);
+    ShaderReflection voxelVertexShader(voxelVertCode), voxelGeometryShader(voxelGeomCode), voxelFragmentShader(voxelFragCode), voxelTexturedFragmentShader(voxelTextFragCode);
     VkPipelineLayout voxelizerPipelineLayout = pipelineLayoutCache.createPipelineLayout((voxelVertexShader+voxelGeometryShader)+voxelFragmentShader);
+    VkPipelineLayout voxelizerTexturedPipelineLayout = pipelineLayoutCache.createPipelineLayout((voxelVertexShader+voxelGeometryShader)+voxelTexturedFragmentShader);
 
     RenderPass voxelizerPass(device);
     VkSubpassDescription voxelizerSubpass{};
@@ -254,6 +279,15 @@ int main(int argc, char* argv[]) {
             .setRenderPass(voxelizerPass, 0)
             .build(device);
 
+    VkPipeline voxelizerTexturedPipeline = GraphicsPipelineBuilder()
+            .setShaders(voxelVertModule, voxelGeomModule, voxelTextFragModule)
+            .setVertexInputState(Vertex::bindings(), Vertex::attributes())
+            .setViewportState(voxelizerViewport, voxelizerScissor)
+            .setRasterizationState(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE, 1.0f, &pipelineRasterizationConservativeStateCreateInfo)
+            .setLayout(voxelizerTexturedPipelineLayout)
+            .setRenderPass(voxelizerPass, 0)
+            .build(device);
+
     auto dummyImage = resourceManager.createImage({.imageType = VK_IMAGE_TYPE_2D, .format = VK_FORMAT_R8G8B8A8_UNORM, .extent = {static_cast<uint32_t>(voxelizerConstants.resolution.x+padding), static_cast<uint32_t>(voxelizerConstants.resolution.x+padding), 1}, .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_4_BIT, .tiling = VK_IMAGE_TILING_OPTIMAL, .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT}, {.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, .usage = VMA_MEMORY_USAGE_GPU_ONLY});
     dummyImage->createImageView({.viewType = VK_IMAGE_VIEW_TYPE_2D, .format = VK_FORMAT_R8G8B8A8_UNORM, .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0,1,0,1}});
 
@@ -279,6 +313,7 @@ int main(int argc, char* argv[]) {
     glm::vec3 camera = {0.0f, 0.0f, -1.0f};
     bool focus = true;
     float timeDebug = 1.0f;
+    uint32_t nodeGeneration = 0;
     while (!window.windowShouldClose()) {
         window.pollEvents(); //TODO bad design
         if (window.windowIconified()) continue; //Pause rendering if minimized
@@ -289,6 +324,11 @@ int main(int argc, char* argv[]) {
         if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
             focus = true;
+        }
+
+        // Dynamic LOD
+        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) != GLFW_PRESS) {
+            voxelizerConstants.center = camera;
         }
 
         if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS) timeDebug = 0.0;
@@ -346,8 +386,10 @@ int main(int argc, char* argv[]) {
         //Experimental
         glm::mat4 model = glm::scale(glm::vec3(1.0f,1.0f,1.0f))*glm::translate(glm::vec3(-0.5,0,0.5f))*glm::rotate(glm::radians(time*50.0f*timeDebug), glm::vec3(0.0f, 1.0f, 0.0f));
         glm::mat4 modelb = glm::scale(glm::vec3(1.0f,1.0f,1.0f)*0.3f)*glm::rotate(glm::radians(time*-1.0f), glm::vec3(0.0f, 1.0f, 0.0f))*glm::translate(glm::vec3(3,1,0));
+        glm::mat4 modelc = glm::scale(2.0f*glm::vec3(1.0f,1.0f,1.0f))*glm::rotate(glm::radians(0.0f), glm::vec3(0.0f, 1.0f, 0.0f))*glm::translate(glm::vec3(0,0,0));
         stagingBufferManager.stageBufferData(&model, objectData->getBuffer(), sizeof(glm::mat4));
         stagingBufferManager.stageBufferData(&modelb, objectData->getBuffer(), sizeof(glm::mat4), sizeof(glm::mat4));
+        stagingBufferManager.stageBufferData(&modelc, objectData->getBuffer(), sizeof(glm::mat4), sizeof(glm::mat4)*2);
         stagingBufferManager.stageBufferData(&view, cameraData->getBuffer(), sizeof(view));
         stagingBufferManager.stageBufferData(&projection, cameraData->getBuffer(), sizeof(projection), sizeof(view));
         stagingBufferManager.flush();
@@ -356,17 +398,28 @@ int main(int argc, char* argv[]) {
 
         commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerPipeline);
         commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerPipelineLayout, 1, {voxelizerDataSet});
-        commandBuffer.pushConstants(voxelizerPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_GEOMETRY_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(voxelizerConstants), &voxelizerConstants);
+        commandBuffer.pushConstants(voxelizerPipelineLayout, VK_SHADER_STAGE_GEOMETRY_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(voxelizerConstants), &voxelizerConstants);
 
+        /*
         commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerPipelineLayout, 0, {dragonSet});
         commandBuffer.bindVertexBuffers(0, {dragon.vertexBuffer->getBuffer()}, {0});
         commandBuffer.bindIndexBuffer(dragon.indexBuffer->getBuffer(), 0, VK_INDEX_TYPE_UINT32);
         commandBuffer.drawIndexed(dragon.indices.size(), 1, 0, 0, 1);
+        */
 
         commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerPipelineLayout, 0, {bunnySet});
         commandBuffer.bindVertexBuffers(0, {bunny.vertexBuffer->getBuffer()}, {0});
         commandBuffer.bindIndexBuffer(bunny.indexBuffer->getBuffer(), 0, VK_INDEX_TYPE_UINT32);
         commandBuffer.drawIndexed(bunny.indices.size(), 1, 0, 0, 0);
+
+        commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerTexturedPipeline);
+        commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerTexturedPipelineLayout, 1, {voxelizerDataSet});
+        commandBuffer.pushConstants(voxelizerTexturedPipelineLayout, VK_SHADER_STAGE_GEOMETRY_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(voxelizerConstants), &voxelizerConstants);
+
+        commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerTexturedPipelineLayout, 0, {voxeliaSet});
+        commandBuffer.bindVertexBuffers(0, {voxelia.vertexBuffer->getBuffer()}, {0});
+        commandBuffer.bindIndexBuffer(voxelia.indexBuffer->getBuffer(), 0, VK_INDEX_TYPE_UINT32);
+        commandBuffer.drawIndexed(voxelia.indices.size(), 1, 0, 0, 1);
 
         voxelizerPass.end(commandBuffer);
 
@@ -394,7 +447,9 @@ int main(int argc, char* argv[]) {
         commandBuffer.fillBuffer(voxelCountBuffer->getBuffer(), 0, VK_WHOLE_SIZE, 0);
 
         commandBuffer.fillBuffer(nodeCountBuffer->getBuffer(), 0, VK_WHOLE_SIZE, voxelizerConstants.resolution.z*voxelizerConstants.resolution.z*voxelizerConstants.resolution.z);
-        commandBuffer.fillBuffer(svoBuffer->getBuffer(), 0, VK_WHOLE_SIZE, 0);
+        commandBuffer.fillBuffer(svoBuffer->getBuffer(), 0, voxelizerConstants.resolution.z*voxelizerConstants.resolution.z*voxelizerConstants.resolution.z*sizeof(OctreeNode), 0);
+        nodeGeneration++;
+        commandBuffer.fillBuffer(nodeGenerationBuffer->getBuffer(), 0, VK_WHOLE_SIZE, nodeGeneration);
 
         commandBuffer.end();
 
@@ -425,6 +480,7 @@ int main(int argc, char* argv[]) {
 
     device.waitIdle();
 
+    vkDestroyPipeline(device, voxelizerTexturedPipeline, nullptr);
     vkDestroyPipeline(device, voxelizerPipeline, nullptr);
     vkDestroyPipeline(device, pipeline, nullptr);
     //Window::terminate();

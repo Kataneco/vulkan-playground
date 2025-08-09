@@ -39,6 +39,8 @@ layout(std430, set = 1, binding = 4) buffer NodeGenerationBuffer {
     uint nodeGeneration;
 };
 
+layout(set = 0, binding = 1) uniform sampler2D texSampler;
+
 layout(push_constant) uniform VoxelizerData {
     vec3 center;
     vec3 resolution; // x: dimensions^3, y: unit length, z: root grid dimensions^3
@@ -147,7 +149,10 @@ void main() {
         uint voxelIndex = uint(-voxelPointer - 1);
         uint normalPacked = packUnorm4x8(vec4((normalize(normal)+vec3(1,1,1))/2, texCoord_priority.z));
         uint oldNormalPacked = atomicMax(voxels[voxelIndex].normal, normalPacked);
-        
-        atomicMax(voxels[voxelIndex].color, packUnorm4x8(vec4(1.0, 1.0, 1.0, texCoord_priority.z)));
+
+        vec3 sampled_color = texture(texSampler, texCoord_priority.xy).xyz;
+        //vec3 sampled_color = vec3(1.0);
+
+        atomicMax(voxels[voxelIndex].color, packUnorm4x8(vec4(sampled_color, texCoord_priority.z)));
     }
 }
