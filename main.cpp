@@ -134,7 +134,7 @@ int main(int argc, char* argv[]) {
 
 
     //Experimental
-    Mesh dragon = Mesh::loadObj("/home/honeywrap/Documents/kitten/assets/dragon.obj");
+    Mesh dragon = Mesh::loadObj("/home/honeywrap/Documents/kitten/assets/bunny.obj");
     dragon.pushMesh(resourceManager, stagingBufferManager);
 
     Mesh bunny = Mesh::loadObj("/home/honeywrap/Documents/kitten/assets/bunny.obj");
@@ -151,7 +151,7 @@ int main(int argc, char* argv[]) {
 
     VoxelizerData voxelizerConstants{
         {0,0,0},
-        {256, 1, 4}
+        {128, 1, 4}
     };
 
     uint32_t padding = log2(voxelizerConstants.resolution.x);

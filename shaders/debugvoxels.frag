@@ -25,7 +25,7 @@ layout(std430, set = 1, binding = 1) buffer VoxelBuffer {
 };
 
 layout(std430, set = 1, binding = 2) buffer NodeCountBuffer {
-    uint nodeCount; // reset to root count
+    uint nodeCount;
 };
 
 layout(std430, set = 1, binding = 3) buffer NodeBuffer {
@@ -33,10 +33,10 @@ layout(std430, set = 1, binding = 3) buffer NodeBuffer {
 };
 
 layout(push_constant) uniform VoxelizerData {
-    vec3 center;
+    vec3 center; // center of the voxel grid
     vec3 resolution; // x: dimensions^3, y: unit length, z: root grid dimensions^3
 
-    vec4 frame;
+    vec4 frame; // framebuffer info
 } data;
 
 layout(location = 0) out vec4 outColor;
@@ -96,17 +96,34 @@ vec3 hsv2rgb(vec3 c) {
     return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
 }
 
+vec2 IntersectAABB(vec3 origin, vec3 invDir, vec3 bbMin, vec3 bbMax) {
+    vec3 t0 = (bbMin - origin) * invDir;
+    vec3 t1 = (bbMax - origin) * invDir;
+
+    vec3 temp = t0;
+    t0 = min(temp, t1), t1 = max(temp, t1);
+
+    float tmin = max(max(t0.x, t0.y), t0.z);
+    float tmax = min(min(t1.x, t1.y), t1.z);
+
+    return vec2(tmin, tmax);
+}
+
 void main() {
+    // Grid prep
     const vec3 boxSize = vec3(data.resolution.y*0.5*data.resolution.z);
     const float voxelGridSize = data.resolution.x*data.resolution.z;
     const float voxelSize = (data.resolution.y) / data.resolution.x;
 
+    // Gay ass shit
     vec3 backgroundColor = vec3(0.1, 0.1, 0.2);
     outColor = vec4(backgroundColor, 1.0);
     
+    // matrix inversion for ray prep
     mat4 invView = inverse(camera.view);
     mat4 invProjection = inverse(camera.projection);
 
+    // Ray prep
     vec2 uv = vec2(gl_FragCoord.xy) / vec2(data.frame.xy);
     vec4 clip = vec4(uv * 2.0 - 1.0, 0.0, 1.0);
     vec4 viewSpace = vec4(invProjection * clip);
@@ -114,7 +131,9 @@ void main() {
     vec4 worldSpace = vec4(invView * vec4(viewSpace.xyz, 0.0));
     vec3 rayDirection = normalize(worldSpace.xyz);
     vec3 rayOrigin = invView[3].xyz-data.center;
+    vec3 invRayDirection = 1.0/rayDirection;
 
+    // first hit on grid
     vec3 boxMin = -boxSize;
     vec3 boxMax = boxSize;
     vec3 tMin = (boxMin - rayOrigin) / rayDirection;
@@ -147,16 +166,15 @@ void main() {
     // Distance to first voxel boundary
     vec3 sideDist = vec3((rayStep * (vec3(mapPos) - voxelRayOrigin) + (rayStep * 0.5) + 0.5) * deltaDist);
 
-    // Variables to track ray traversal
+    // kinda useless now
     bool hitVoxel = false;
 
-    // Maximum number of steps to prevent infinite loops
-    const int MAX_STEPS = 512; // Increased for dense grid
+    // yeah
+    const int MAX_STEPS = 512; // should be at max 128 at production, 16 for realtime vr performance
 
-    int hitcount = 0;
-    uint maxDepth = uint(log2(data.resolution.x));
+    const uint maxDepth = uint(log2(data.resolution.x));
 
-    // DDA algorithm for fast voxel traversal
+    // DDA but needs to be replaced by cone tracing soon
     for(int steps = 0; steps < MAX_STEPS; steps++) {
         // Check current voxel
         uint lastDepth = maxDepth;
@@ -164,10 +182,8 @@ void main() {
             int idx = findVoxel(mapPos, maxDepth, maxDepth, lastDepth);
 
             if(idx < 0) {
-                // Hit a voxel!
                 hitVoxel = true;
 
-                // Use stored normal or calculate from hit direction
                 vec3 lnormal = (unpackUnorm4x8(voxels[-idx-1].normal).xyz * 2.0) - vec3(1.0);
 
                 // Apply lighting
@@ -180,12 +196,11 @@ void main() {
                 float spec = pow(max(dot(lnormal, halfwayDir), 0.0), 32.0);
                 color += vec3(0.3) * spec;
 
-                hitcount++;
                 outColor += vec4(color, 1.0);
 
-                float t = float(steps)/float(MAX_STEPS);
-                outColor = vec4(hsv2rgb(vec3(0.7-t*4.14,1.0,1.0)), 1.0);
-                hitcount = 1;
+                //float t = float(steps)/float(MAX_STEPS);
+                //outColor = vec4(hsv2rgb(vec3(0.7-t*4.14,1.0,1.0)), 1.0);
+                //hitcount = 1;
 
                 break;
             }
@@ -193,6 +208,11 @@ void main() {
         
         int skip = 1 << (maxDepth-lastDepth);
         ivec3 razor = mapPos/skip;
+
+        // LSD mathematics
+        float unit_size = data.resolution.y/float(skip);
+        vec3 position = voxelRayOrigin+sideDist;
+        position /= skip;
 
         while(razor == mapPos/skip) {
             // Find next voxel boundary
@@ -206,12 +226,9 @@ void main() {
         // Exit if outside grid bounds
         if(any(lessThan(mapPos, ivec3(0))) || any(greaterThanEqual(mapPos, ivec3(voxelGridSize)))
         || steps == MAX_STEPS - 1) {
-            // Optional: Use a gradient based on ray travel distance for nice background
             float t = float(steps)/float(MAX_STEPS);
             outColor = vec4(hsv2rgb(vec3(0.7-t*4.14,1.0,1.0)), 1.0);
             break;
         }
     }
-
-    outColor /= hitcount > 0 ? hitcount : 1;
 }
