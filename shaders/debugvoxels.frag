@@ -109,8 +109,8 @@ vec2 IntersectAABB(vec3 origin, vec3 invDir, vec3 bbMin, vec3 bbMax) {
     return vec2(tmin, tmax);
 }
 
-void nodeAABB(in vec3 pos, in uint depth, in uint maxDepth, out vec3 bbMin, out vec3 bbMax) {
-    int skip = 1 << (maxDepth-depth);
+void nodeAABB(in vec3 pos, in uint depth, out vec3 bbMin, out vec3 bbMax) {
+    int skip = 1 << (depth);
     float unit_size = data.resolution.y/float(skip);
 
     bbMin = floor(pos/unit_size)*unit_size;
@@ -138,67 +138,52 @@ void main() {
 
     const uint maxDepth = uint(log2(data.resolution.x));
 
-    // Grid bounds
     float gridSize = data.resolution.y * data.resolution.z;
     vec3 gridMin = vec3(-gridSize * 0.5);
     vec3 gridMax = vec3(gridSize * 0.5);
 
-    // Ray-grid intersection
     vec2 tGrid = IntersectAABB(rayOrigin, invRayDirection, gridMin, gridMax);
     if (tGrid.y < 0.0 || tGrid.x > tGrid.y) {
-        return; // Ray misses the grid
+        return;
     }
 
     float t = max(tGrid.x, 0.0);
     float maxT = tGrid.y;
 
-    const float stepSize = data.resolution.y; // Minimum voxel size
-    const int maxSteps = 1000; // Prevent infinite loops
+    const float stepSize = data.resolution.y;
+    const int maxSteps = 256;
 
-    // Efficient octree traversal using nodeAABB
     for (int step = 0; step < maxSteps && t < maxT; ++step) {
+        //outColor.rgb = hsv2rgb(vec3(float(step)/maxSteps, 1.0, 1.0));
+
         vec3 rayPos = rayOrigin + rayDirection * t;
         vec3 gridPos = worldToGrid(rayPos);
 
-        // Convert to voxel coordinates
-        ivec3 voxelCoord = ivec3(floor(gridPos * (data.resolution.x)));
+        ivec3 voxelCoord = ivec3(floor(gridPos * (data.resolution.x/data.resolution.y)));
 
-        // Check bounds
-        int gridDim = int(data.resolution.x*data.resolution.z);
-        if (any(lessThan(voxelCoord, ivec3(0))) || any(greaterThanEqual(voxelCoord, ivec3(gridDim)))) {
-            break;
-        }
-
-        // Find voxel in octree
-        uint foundDepth;
+        uint foundDepth = maxDepth;
         int result = findVoxel(voxelCoord, maxDepth, maxDepth, foundDepth);
 
         if (result < 0) {
-            // Hit a voxel (negative indices indicate voxel data)
             int voxelIndex = -result - 1;
-            if (voxelIndex < int(voxelCount)) {
-                Voxel voxel = voxels[voxelIndex];
+            Voxel voxel = voxels[voxelIndex];
 
-                vec3 color = unpackUnorm4x8(voxel.color).rgb;
-                vec3 normal = (unpackUnorm4x8(voxel.normal).xyz * 2.0) - vec3(1.0);
+            vec3 color = unpackUnorm4x8(voxel.color).rgb;
+            vec3 normal = (unpackUnorm4x8(voxel.normal).xyz * 2.0) - vec3(1.0);
 
-                // Simple lighting
-                vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
-                float lighting = max(0.2, dot(normal, lightDir));
+            // Simple lighting
+            vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
+            float lighting = max(0.2, dot(normal, lightDir));
 
-                outColor = vec4(color * lighting, 1.0);
-                return;
-            }
+            outColor = vec4(color * lighting, 1.0);
+            return;
         }
 
-        // Use nodeAABB to find the exit point of current node
         vec3 bbMin, bbMax;
-        nodeAABB(rayPos, foundDepth, maxDepth, bbMin, bbMax);
+        nodeAABB(rayPos, foundDepth, bbMin, bbMax);
 
-        // Find where ray exits this node's AABB
         vec2 tNode = IntersectAABB(rayOrigin, invRayDirection, bbMin, bbMax);
 
-        // Jump to exit point + small epsilon to ensure we're in the next voxel
-        t = tNode.y + stepSize * 0.001;
+        t = tNode.y + stepSize * 0.0001;
     }
 }
