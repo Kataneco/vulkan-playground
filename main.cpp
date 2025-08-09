@@ -151,7 +151,7 @@ int main(int argc, char* argv[]) {
 
     VoxelizerData voxelizerConstants{
         {0,0,0},
-        {128, 1, 4}
+        {256, 1, 4}
     };
 
     uint32_t padding = log2(voxelizerConstants.resolution.x);
