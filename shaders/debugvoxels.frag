@@ -87,7 +87,7 @@ int findVoxel(ivec3 voxelPosition, uint depth, uint maxDepth, out uint lastDepth
 }
 
 vec3 worldToGrid(vec3 pos) {
-    return pos-vec3(-data.resolution.y*data.resolution.z*0.5)+data.center;
+    return pos-vec3(-data.resolution.y*data.resolution.z*0.5);//+data.center;
 }
 
 vec3 hsv2rgb(vec3 c) {
@@ -109,12 +109,15 @@ vec2 IntersectAABB(vec3 origin, vec3 invDir, vec3 bbMin, vec3 bbMax) {
     return vec2(tmin, tmax);
 }
 
-void main() {
-    // Grid prep
-    const vec3 boxSize = vec3(data.resolution.y*0.5*data.resolution.z);
-    const float voxelGridSize = data.resolution.x*data.resolution.z;
-    const float voxelSize = (data.resolution.y) / data.resolution.x;
+void nodeAABB(in vec3 pos, in uint depth, in uint maxDepth, out vec3 bbMin, out vec3 bbMax) {
+    int skip = 1 << (maxDepth-depth);
+    float unit_size = data.resolution.y/float(skip);
 
+    bbMin = floor(pos/unit_size)*unit_size;
+    bbMax = bbMin + vec3(unit_size);
+}
+
+void main() {
     // Gay ass shit
     vec3 backgroundColor = vec3(0.1, 0.1, 0.2);
     outColor = vec4(backgroundColor, 1.0);
@@ -133,102 +136,5 @@ void main() {
     vec3 rayOrigin = invView[3].xyz-data.center;
     vec3 invRayDirection = 1.0/rayDirection;
 
-    // first hit on grid
-    vec3 boxMin = -boxSize;
-    vec3 boxMax = boxSize;
-    vec3 tMin = (boxMin - rayOrigin) / rayDirection;
-    vec3 tMax = (boxMax - rayOrigin) / rayDirection;
-    vec3 t1 = min(tMin, tMax);
-    vec3 t2 = max(tMin, tMax);
-    float tNear = max(max(t1.x, t1.y), t1.z);
-    float tFar = min(min(t2.x, t2.y), t2.z);
-
-    if(tNear >= tFar || tFar < 0.0) {
-        return;
-    }
-
-    float startT = max(tNear, 0.0);
-    vec3 currentPosition = rayOrigin + startT * rayDirection;
-
-    // Prepare for DDA algorithm
-    // Convert ray to voxel grid space where each voxel is 1 unit
-    vec3 voxelRayOrigin = (currentPosition + boxSize) * (voxelGridSize / (boxSize.x*2));
-
-    // Get initial voxel cell
-    ivec3 mapPos = ivec3(floor(voxelRayOrigin));
-
-    // Calculate ray step direction and initial side distances
-    ivec3 rayStep = ivec3(sign(rayDirection));
-
-    // Length of ray movement needed for one voxel in each direction
-    vec3 deltaDist = abs(vec3(length(rayDirection)) / rayDirection);
-
-    // Distance to first voxel boundary
-    vec3 sideDist = vec3((rayStep * (vec3(mapPos) - voxelRayOrigin) + (rayStep * 0.5) + 0.5) * deltaDist);
-
-    // kinda useless now
-    bool hitVoxel = false;
-
-    // yeah
-    const int MAX_STEPS = 512; // should be at max 128 at production, 16 for realtime vr performance
-
     const uint maxDepth = uint(log2(data.resolution.x));
-
-    // DDA but needs to be replaced by cone tracing soon
-    for(int steps = 0; steps < MAX_STEPS; steps++) {
-        // Check current voxel
-        uint lastDepth = maxDepth;
-        if(all(greaterThanEqual(mapPos, ivec3(0))) && all(lessThan(mapPos, ivec3(voxelGridSize)))) {
-            int idx = findVoxel(mapPos, maxDepth, maxDepth, lastDepth);
-
-            if(idx < 0) {
-                hitVoxel = true;
-
-                vec3 lnormal = (unpackUnorm4x8(voxels[-idx-1].normal).xyz * 2.0) - vec3(1.0);
-
-                // Apply lighting
-                vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
-                float diffuse = max(dot(lnormal, lightDir), 0.2); // Ambient + diffuse
-                vec3 color = (vec3(0.8, 0.85, 0.9)/2+lnormal/2) * diffuse;
-
-                vec3 viewDir = -rayDirection;
-                vec3 halfwayDir = normalize(lightDir + viewDir);
-                float spec = pow(max(dot(lnormal, halfwayDir), 0.0), 32.0);
-                color += vec3(0.3) * spec;
-
-                outColor += vec4(color, 1.0);
-
-                //float t = float(steps)/float(MAX_STEPS);
-                //outColor = vec4(hsv2rgb(vec3(0.7-t*4.14,1.0,1.0)), 1.0);
-                //hitcount = 1;
-
-                break;
-            }
-        }
-
-        int skip = 1 << (maxDepth-lastDepth);
-        ivec3 razor = mapPos/skip;
-
-        // LSD mathematics
-        float unit_size = data.resolution.y/float(skip);
-        vec3 position = voxelRayOrigin+sideDist;
-        position /= skip;
-
-        while(razor == mapPos/skip) {
-            // Find next voxel boundary
-            vec3 mask = vec3(lessThanEqual(sideDist.xyz, min(sideDist.yzx, sideDist.zxy)));
-
-            // Advance ray to next voxel
-            sideDist += (mask) * deltaDist;
-            mapPos += ivec3((mask)) * rayStep;
-        }
-
-        // Exit if outside grid bounds
-        if(any(lessThan(mapPos, ivec3(0))) || any(greaterThanEqual(mapPos, ivec3(voxelGridSize)))
-        || steps == MAX_STEPS - 1) {
-            float t = float(steps)/float(MAX_STEPS);
-            outColor = vec4(hsv2rgb(vec3(0.7-t*4.14,1.0,1.0)), 1.0);
-            break;
-        }
-    }
 }
