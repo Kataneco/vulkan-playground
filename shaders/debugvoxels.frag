@@ -3,8 +3,8 @@ precision highp int;
 
 struct Node {
     int parent;
-    int occlusion; // amount of total children
-    int emission; // pointer to voxel that sums up all child voxels
+    uint occlusion; // amount of total children
+    uint emission; // pointer to voxel that sums up all child voxels
     uint generation; // node age
     int children[8];
 };
@@ -128,7 +128,7 @@ void nodeAABB(in vec3 pos, in uint depth, out vec3 bbMin, out vec3 bbMax) {
 void main() {
     // Gay ass shit
     vec3 backgroundColor = vec3(0.1, 0.1, 0.2);
-    outColor = vec4(backgroundColor, 1.0);
+    outColor = vec4(backgroundColor, 0.5);
 
     // matrix inversion for ray prep
     mat4 invView = inverse(camera.view);
@@ -183,7 +183,43 @@ void main() {
             vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
             float lighting = max(0.2, dot(normal, lightDir));
 
-            outColor = vec4(color * lighting, 1.0);
+            vec3 sampleDir = reflect(rayDirection, normal);
+            //sampleDir = lightDir;
+
+            float a = 0.05f;
+
+            rayPos += normal*a;
+
+            const float fov = 2.0f*tan(radians(5.0f));
+            const float p = data.resolution.y * sqrt(3.0f);
+            uint occlusion = 1;
+            for (int sex = 0; sex < 64; ++sex) {
+                uint k = uint(max(1.0f, 1.0 + float(maxDepth) - floor(log2((fov * a) / p))));
+                vec3 rp = rayPos+sampleDir*a;
+
+                if(any(greaterThan(abs(rp), gridMax))) break;
+
+                vec3 bbMin, bbMax;
+                nodeAABB(rp, k, bbMin, bbMax);
+
+                vec2 tNode = IntersectAABB(rayPos, 1.0f/sampleDir, bbMin, bbMax);
+
+                a = tNode.y + stepSize * 0.001;
+
+                vec3 gp = worldToGrid(rp);
+                ivec3 vxlc = ivec3(floor(gp * (data.resolution.x/data.resolution.y)));
+                uint fd = 0;
+                int vxl = findVoxel(vxlc, k, maxDepth, fd);
+
+                if(vxl < 0) {
+                    occlusion += (1u << ((maxDepth-fd)*3));
+                } else {
+                    Node n = nodes[vxl];
+                    occlusion += n.occlusion;
+                }
+            }
+
+            outColor = vec4(color * lighting /** (1.0f/max(1.0, ((float(occlusion)/16000.0f))))*/, 1.0);
             return;
         }
 

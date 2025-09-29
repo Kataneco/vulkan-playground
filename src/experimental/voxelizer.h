@@ -3,8 +3,8 @@
 
 struct OctreeNode {
     int parent;
-    int occlusion; // amount of total children
-    int emission; // pointer to voxel that sums up all child voxels
+    uint32_t occlusion; // amount of total children
+    uint32_t emission; // pointer to voxel that sums up all child voxels
     uint32_t generation; // node age
     int children[8];
 };

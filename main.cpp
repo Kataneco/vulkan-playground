@@ -15,6 +15,7 @@ int main(int argc, char* argv[]) {
     Device device(instance, {.independentBlend = VK_TRUE, .geometryShader = VK_TRUE, .fillModeNonSolid = VK_TRUE, .wideLines = VK_TRUE, .samplerAnisotropy = VK_TRUE, .vertexPipelineStoresAndAtomics = VK_TRUE, .fragmentStoresAndAtomics = VK_TRUE}, {});
 
     Texture icon = Texture::loadImage("/home/honeywrap/Documents/kitten/assets/icon.png");
+    glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
     Window window(1600, 900);
     window.setWindowIcon(icon, icon);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
@@ -326,11 +327,6 @@ int main(int argc, char* argv[]) {
             focus = true;
         }
 
-        // Dynamic LOD
-        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) != GLFW_PRESS) {
-            voxelizerConstants.center = camera;
-        }
-
         if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS) timeDebug = 0.0;
         else timeDebug = 1.0;
 
@@ -368,6 +364,11 @@ int main(int argc, char* argv[]) {
         direction.y = sin(glm::radians(pitch));
         direction.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
 
+        // Dynamic LOD
+        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) != GLFW_PRESS) {
+            voxelizerConstants.center = glm::round(camera+direction*0.5f);
+        }
+
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) camera += speed*deltaTime*glm::normalize(direction);
         if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) camera -= speed*deltaTime*glm::normalize(direction);
         if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) camera -= speed*deltaTime*glm::normalize(glm::cross(glm::normalize(direction), glm::vec3(0.0f, 1.0f, 0.0f)));
@@ -398,7 +399,7 @@ int main(int argc, char* argv[]) {
 
         commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerPipeline);
         commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerPipelineLayout, 1, {voxelizerDataSet});
-        commandBuffer.pushConstants(voxelizerPipelineLayout, VK_SHADER_STAGE_GEOMETRY_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(voxelizerConstants), &voxelizerConstants);
+        commandBuffer.pushConstants(voxelizerPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_GEOMETRY_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(voxelizerConstants), &voxelizerConstants);
 
         /*
         commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerPipelineLayout, 0, {dragonSet});
@@ -412,14 +413,16 @@ int main(int argc, char* argv[]) {
         commandBuffer.bindIndexBuffer(bunny.indexBuffer->getBuffer(), 0, VK_INDEX_TYPE_UINT32);
         commandBuffer.drawIndexed(bunny.indices.size(), 1, 0, 0, 0);
 
+        /*
         commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerTexturedPipeline);
         commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerTexturedPipelineLayout, 1, {voxelizerDataSet});
-        commandBuffer.pushConstants(voxelizerTexturedPipelineLayout, VK_SHADER_STAGE_GEOMETRY_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(voxelizerConstants), &voxelizerConstants);
+        commandBuffer.pushConstants(voxelizerTexturedPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_GEOMETRY_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(voxelizerConstants), &voxelizerConstants);
 
         commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerTexturedPipelineLayout, 0, {voxeliaSet});
         commandBuffer.bindVertexBuffers(0, {voxelia.vertexBuffer->getBuffer()}, {0});
         commandBuffer.bindIndexBuffer(voxelia.indexBuffer->getBuffer(), 0, VK_INDEX_TYPE_UINT32);
         commandBuffer.drawIndexed(voxelia.indices.size(), 1, 0, 0, 1);
+        */
 
         voxelizerPass.end(commandBuffer);
 

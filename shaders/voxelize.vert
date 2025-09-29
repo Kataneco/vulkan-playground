@@ -19,7 +19,7 @@ layout(push_constant) uniform VoxelizerData {
 void main() {
     gl_Position = (objectData.model * vec4(position, 1));
     gl_Position /= gl_Position.w;
-    gl_Position.xyz -= data.center + vec3(0.0001);
+    gl_Position.xyz -= data.center;
     outNormal = normal;
     outTexCoord = texCoord;
 }

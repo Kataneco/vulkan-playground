@@ -8,8 +8,8 @@ layout(location = 3) in vec3 groot;
 
 struct Node {
     int parent;
-    int occlusion; // amount of total children
-    int emission; // pointer to voxel that sums up all child voxels
+    uint occlusion; // amount of total children
+    uint emission; // pointer to voxel that sums up all child voxels
     uint generation; // node age
     int children[8];
 };
@@ -108,6 +108,15 @@ int findOrCreateVoxel(ivec3 voxelPosition, uint depth, uint maxDepth) {
             voxels[voxelIndex].normal = 0;
             voxels[voxelIndex].color = 0;
             int newLeafPointer = -int(voxelIndex + 1);
+
+            uint density = 1u << ((maxDepth-depth)*3);
+            int backtrace = nodeIndex;
+            while (backtrace > rootIndex) {
+                atomicAdd(nodes[backtrace].occlusion, density);
+                backtrace = nodes[backtrace].parent;
+            }
+            atomicAdd(nodes[backtrace].occlusion, density);
+
             atomicCompSwap(nodes[nodeIndex].children[childIndex], 2147483647, newLeafPointer);
         }
     }
