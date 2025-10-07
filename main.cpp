@@ -165,7 +165,7 @@ int main(int argc, char* argv[]) {
 
     VoxelizerData voxelizerConstants{
         {0,0,0},
-        {128, 1.0, 8}
+        {256, 1.0, 8}
     };
 
     uint32_t padding = log2(voxelizerConstants.resolution.x);
@@ -413,7 +413,6 @@ int main(int argc, char* argv[]) {
         commandBuffer.bindIndexBuffer(bunny.indexBuffer->getBuffer(), 0, VK_INDEX_TYPE_UINT32);
         commandBuffer.drawIndexed(bunny.indices.size(), 1, 0, 0, 0);
 
-        /*
         commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerTexturedPipeline);
         commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerTexturedPipelineLayout, 1, {voxelizerDataSet});
         commandBuffer.pushConstants(voxelizerTexturedPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_GEOMETRY_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(voxelizerConstants), &voxelizerConstants);
@@ -422,7 +421,6 @@ int main(int argc, char* argv[]) {
         commandBuffer.bindVertexBuffers(0, {voxelia.vertexBuffer->getBuffer()}, {0});
         commandBuffer.bindIndexBuffer(voxelia.indexBuffer->getBuffer(), 0, VK_INDEX_TYPE_UINT32);
         commandBuffer.drawIndexed(voxelia.indices.size(), 1, 0, 0, 1);
-        */
 
         voxelizerPass.end(commandBuffer);
 

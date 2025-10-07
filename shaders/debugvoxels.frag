@@ -176,51 +176,113 @@ void main() {
             int voxelIndex = -result - 1;
             Voxel voxel = voxels[voxelIndex];
 
-            vec3 color = unpackUnorm4x8(voxel.color).rgb;
-            vec3 normal = (unpackUnorm4x8(voxel.normal).xyz * 2.0) - vec3(1.0);
+            vec4 color = unpackUnorm4x8(voxel.color).rgba;
 
-            // Simple lighting
-            vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
-            float lighting = max(0.2, dot(normal, lightDir));
+            if(color.a > 0.5) {
 
-            vec3 sampleDir = reflect(rayDirection, normal);
-            //sampleDir = lightDir;
+                vec3 normal = (unpackUnorm4x8(voxel.normal).xyz * 2.0) - vec3(1.0);
 
-            float a = 0.05f;
+                // Simple lighting
+                vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
+                float lighting = max(0.2, dot(normal, lightDir));
 
-            rayPos += normal*a;
+                vec3 sampleDir = reflect(rayDirection, normal);
+                sampleDir = lightDir;
 
-            const float fov = 2.0f*tan(radians(5.0f));
-            const float p = data.resolution.y * sqrt(3.0f);
-            uint occlusion = 1;
-            for (int sex = 0; sex < 64; ++sex) {
-                uint k = uint(max(1.0f, 1.0 + float(maxDepth) - floor(log2((fov * a) / p))));
-                vec3 rp = rayPos+sampleDir*a;
+                float a = 0.005f;
+                rayPos += normal * a;
+                float occlusion = 1.0;
+                uint fd = maxDepth;
+                for (int sex = 0; sex < 64; ++sex) {
+                    vec3 rp = rayPos + sampleDir * a;
 
-                if(any(greaterThan(abs(rp), gridMax))) break;
+                    if (any(greaterThan(abs(rp), gridMax))) break;
 
-                vec3 bbMin, bbMax;
-                nodeAABB(rp, k, bbMin, bbMax);
+                    vec3 gp = worldToGrid(rp);
+                    ivec3 vxlc = ivec3(floor(gp * (data.resolution.x / data.resolution.y)));
+                    int vxl = findVoxel(vxlc, maxDepth, maxDepth, fd);
 
-                vec2 tNode = IntersectAABB(rayPos, 1.0f/sampleDir, bbMin, bbMax);
+                    if (vxl < 0) {
+                        if(unpackUnorm4x8(voxels[-vxl-1].color).a > 0.5) {
+                            occlusion = 0.0;
+                            break;
+                        }
+                    }
 
-                a = tNode.y + stepSize * 0.001;
+                    vec3 bbMin, bbMax;
+                    nodeAABB(rp, fd, bbMin, bbMax);
 
-                vec3 gp = worldToGrid(rp);
-                ivec3 vxlc = ivec3(floor(gp * (data.resolution.x/data.resolution.y)));
-                uint fd = 0;
-                int vxl = findVoxel(vxlc, k, maxDepth, fd);
+                    vec2 tNode = IntersectAABB(rayPos, 1.0f / sampleDir, bbMin, bbMax);
 
-                if(vxl < 0) {
-                    occlusion += (1u << ((maxDepth-fd)*3));
-                } else {
-                    Node n = nodes[vxl];
-                    occlusion += n.occlusion;
+                    a = tNode.y + stepSize * 0.00001;
                 }
-            }
 
-            outColor = vec4(color * lighting /** (1.0f/max(1.0, ((float(occlusion)/16000.0f))))*/, 1.0);
-            return;
+                if(occlusion == 0.0) {
+                    sampleDir = lightDir;
+
+                    a = 0.005f;
+                    fd = maxDepth;
+                    normal = vec3(0,1,0);
+                    for (int sex = 0; sex < 128; ++sex) {
+                        vec3 rp = rayPos + sampleDir * a;
+
+                        if (any(greaterThan(abs(rp), gridMax))) break;
+
+                        vec3 gp = worldToGrid(rp);
+                        ivec3 vxlc = ivec3(floor(gp * (data.resolution.x / data.resolution.y)));
+                        int vxl = findVoxel(vxlc, maxDepth, maxDepth, fd);
+
+                        if (vxl < 0) {
+                            if(unpackUnorm4x8(voxels[-vxl-1].color).a > 0.5) {
+                                rayPos = rp;
+                                voxelIndex = -vxl-1;
+                                break;
+                            }
+                        }
+
+                        vec3 bbMin, bbMax;
+                        nodeAABB(rp, fd, bbMin, bbMax);
+
+                        vec2 tNode = IntersectAABB(rayPos, 1.0f / sampleDir, bbMin, bbMax);
+
+                        a = tNode.y + stepSize * 0.00001;
+                    }
+
+                    vec3 sampleDir = reflect(rayDirection, normal);
+                    sampleDir = lightDir;
+
+                    a = 0.005f;
+                    rayPos += normal * a;
+                    fd = maxDepth;
+                    for (int sex = 0; sex < 128; ++sex) {
+                        vec3 rp = rayPos + sampleDir * a;
+
+                        if (any(greaterThan(abs(rp), gridMax))) break;
+
+                        vec3 gp = worldToGrid(rp);
+                        ivec3 vxlc = ivec3(floor(gp * (data.resolution.x / data.resolution.y)));
+                        int vxl = findVoxel(vxlc, maxDepth, maxDepth, fd);
+
+                        if (vxl < 0) {
+                            if(unpackUnorm4x8(voxels[-vxl-1].color).a > 0.5) {
+                                occlusion = 0.5;
+                                break;
+                            }
+                        }
+
+                        vec3 bbMin, bbMax;
+                        nodeAABB(rp, fd, bbMin, bbMax);
+
+                        vec2 tNode = IntersectAABB(rayPos, 1.0f / sampleDir, bbMin, bbMax);
+
+                        a = tNode.y + stepSize * 0.00001;
+                    }
+
+                }
+
+                outColor = vec4(color.rgb * lighting * occlusion, color.a);
+                return;
+            }
         }
 
         vec3 bbMin, bbMax;
@@ -228,6 +290,6 @@ void main() {
 
         vec2 tNode = IntersectAABB(rayOrigin, invRayDirection, bbMin, bbMax);
 
-        t = tNode.y + stepSize * 0.001;
+        t = tNode.y + stepSize * 0.00001;
     }
 }

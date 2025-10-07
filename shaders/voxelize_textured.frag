@@ -159,9 +159,9 @@ void main() {
         uint normalPacked = packUnorm4x8(vec4((normalize(normal)+vec3(1,1,1))/2, texCoord_priority.z));
         uint oldNormalPacked = atomicMax(voxels[voxelIndex].normal, normalPacked);
 
-        vec3 sampled_color = texture(texSampler, texCoord_priority.xy).xyz;
+        vec4 sampled_color = texture(texSampler, texCoord_priority.xy).xyzw;
         //vec3 sampled_color = vec3(1.0);
 
-        atomicMax(voxels[voxelIndex].color, packUnorm4x8(vec4(sampled_color, texCoord_priority.z)));
+        atomicMax(voxels[voxelIndex].color, packUnorm4x8(vec4(sampled_color)));
     }
 }
