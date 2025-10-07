@@ -149,7 +149,7 @@ void main() {
     float LOD = max(tmp.x, max(tmp.y, tmp.z))+1.0;
 
     uint maxdepth = uint(ceil(log2(data.resolution.x)));
-    uint depth = maxdepth-uint(log2(LOD)*2.0);
+    uint depth = maxdepth-uint(log2(LOD)*1.0);
     int voxelPointer = findOrCreateVoxel(voxelPosition, depth, maxdepth);
 
     if (voxelPointer < 0) {
