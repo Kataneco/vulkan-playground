@@ -5,7 +5,7 @@
 #include "src/experimental/voxelizer.h"
 
 int main(int argc, char* argv[]) {
-    std::cout << "Haii wurld!! :3" << std::endl;
+    std::cout << "Hello, darlings!" << std::endl;
     srand(time(nullptr));
 
     Window::initialize();
