@@ -99,6 +99,7 @@ add_executable(kitten main.cpp
         lib/imnodes/imnodes_internal.h
         lib/TextEditor.cpp
         lib/TextEditor.h
+        lib/imgui-docking/misc/cpp/imgui_stdlib.cpp
 )
 
 target_link_libraries(kitten glfw X11)

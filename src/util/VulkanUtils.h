@@ -31,6 +31,7 @@
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_vulkan.h"
+#include "misc/cpp/imgui_stdlib.h"
 
 #define VMA_STATIC_VULKAN_FUNCTIONS 0
 #define VMA_DYNAMIC_VULKAN_FUNCTIONS 0
@@ -58,6 +59,10 @@ std::string readFile(const char* filePath);
 struct DescriptorSetLayoutData {
     uint32_t set;
     std::vector<VkDescriptorSetLayoutBinding> bindings;
+
+    //TODO: For UI only, reimplement reflection in UI to avoid having to have this
+    std::vector<std::string> names;
+
     bool operator==(const DescriptorSetLayoutData &other) const;
     VkDescriptorSetLayoutCreateInfo getCreateInfo();
 };

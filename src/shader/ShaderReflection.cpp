@@ -41,6 +41,7 @@ void ShaderReflection::reflectDescriptorSets() {
             }
             binding.stageFlags = static_cast<VkShaderStageFlags>(module.shader_stage);
             layout.bindings.push_back(binding);
+            layout.names.push_back(reflectedBinding->name);
         }
         descriptorSetLayouts.push_back(layout);
     }

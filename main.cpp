@@ -178,7 +178,7 @@ int main(int argc, char* argv[]) {
     init_info.Queue = device.getGraphicsQueue();
     //init_info.PipelineCache = g_PipelineCache;
     //init_info.DescriptorPool = g_DescriptorPool;
-    init_info.DescriptorPoolSize = IMGUI_IMPL_VULKAN_MINIMUM_IMAGE_SAMPLER_POOL_SIZE+16;
+    init_info.DescriptorPoolSize = 1024;
     init_info.MinImageCount = swapchain.getImageCount();
     init_info.ImageCount = swapchain.getImageCount();
     init_info.Allocator = nullptr;
@@ -189,7 +189,7 @@ int main(int argc, char* argv[]) {
     ImGui_ImplVulkan_Init(&init_info);
 
     // Node editor
-    VulkanNodeEditor nodeEditor;
+    VulkanNodeEditor nodeEditor(instance, device);
 
     // Text editor
     TextEditor editor;
