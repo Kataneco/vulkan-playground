@@ -19,11 +19,18 @@
 #include <algorithm>
 #include <queue>
 
-#define VK_NO_PROTOTYPES
+//#define VK_NO_PROTOTYPES
 #include "volk.h"
 
 #define GLFW_INCLUDE_NONE
+//#define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
+
+//#define IMGUI_IMPL_VULKAN_NO_PROTOTYPES
+#define IMGUI_IMPL_VULKAN_USE_VOLK
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_vulkan.h"
 
 #define VMA_STATIC_VULKAN_FUNCTIONS 0
 #define VMA_DYNAMIC_VULKAN_FUNCTIONS 0

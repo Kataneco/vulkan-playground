@@ -12,6 +12,7 @@ public:
     RenderPass &operator=(RenderPass &&other) noexcept;
 
     void create(const std::vector<VkAttachmentDescription> &attachments, const std::vector<VkSubpassDescription> &subpasses, const std::vector<VkSubpassDependency> &dependencies);
+    // TODO: Destroy
 
     operator VkRenderPass() const { return renderPass; }
 

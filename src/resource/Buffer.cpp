@@ -5,7 +5,7 @@ Buffer::Buffer(VkDevice device, VmaAllocator allocator, const VkBufferCreateInfo
 }
 
 Buffer::~Buffer() {
-    destroy();
+    Buffer::destroy();
 }
 
 void Buffer::destroy() {

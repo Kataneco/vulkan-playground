@@ -5,7 +5,7 @@ Sampler::Sampler(VkDevice device, const VkSamplerCreateInfo &samplerInfo, const 
 }
 
 Sampler::~Sampler() {
-    destroy();
+    Sampler::destroy();
 }
 
 void Sampler::destroy() {

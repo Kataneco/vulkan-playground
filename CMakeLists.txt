@@ -8,8 +8,11 @@ find_package(glfw3)
 
 include_directories(SYSTEM lib)
 include_directories(src)
+include_directories(lib/imgui-docking)
+include_directories(lib/imgui-docking/backends)
+include_directories(lib/imnodes)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -flto -march=native")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -flto -march=native")
 
 add_executable(kitten main.cpp
         src/core/VulkanInstance.cpp
@@ -78,9 +81,27 @@ add_executable(kitten main.cpp
         src/resource/Texture.h
         src/experimental/voxelizer.cpp
         src/experimental/voxelizer.h
+        src/alphyslab/node.cpp
+        src/alphyslab/node.h
+        ui.h
+        lib/imgui-docking/imgui.cpp
+        lib/imgui-docking/imgui_demo.cpp
+        lib/imgui-docking/imgui_draw.cpp
+        lib/imgui-docking/imgui_internal.h
+        lib/imgui-docking/imgui_tables.cpp
+        lib/imgui-docking/imgui_widgets.cpp
+        lib/imgui-docking/imstb_rectpack.h
+        lib/imgui-docking/imstb_textedit.h
+        lib/imgui-docking/imstb_truetype.h
+        lib/imgui-docking/backends/imgui_impl_glfw.cpp
+        lib/imgui-docking/backends/imgui_impl_vulkan.cpp
+        lib/imnodes/imnodes.cpp
+        lib/imnodes/imnodes_internal.h
+        lib/TextEditor.cpp
+        lib/TextEditor.h
 )
 
-target_link_libraries(kitten glfw)
+target_link_libraries(kitten glfw X11)
 
 #Shader compilation
 find_program(GLSLC_EXECUTABLE glslc)

@@ -7,7 +7,7 @@ Image::Image(VkDevice device, VmaAllocator allocator, const VkImageCreateInfo &i
 }
 
 Image::~Image() {
-    destroy();
+    Image::destroy();
 }
 
 void Image::destroy() {
