@@ -6,6 +6,9 @@ Sampler::Sampler(VkDevice device, const VkSamplerCreateInfo &samplerInfo, const 
 
 Sampler::~Sampler() {
     Sampler::destroy();
+#ifdef KITTEN_MEMORY_DEBUG
+    std::clog << "Destroyed sampler: " << name << std::endl;
+#endif
 }
 
 void Sampler::destroy() {

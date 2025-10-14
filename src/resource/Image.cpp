@@ -8,6 +8,9 @@ Image::Image(VkDevice device, VmaAllocator allocator, const VkImageCreateInfo &i
 
 Image::~Image() {
     Image::destroy();
+#ifdef KITTEN_MEMORY_DEBUG
+    std::clog << "Destroyed image: " << name << std::endl;
+#endif
 }
 
 void Image::destroy() {

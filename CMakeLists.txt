@@ -13,6 +13,7 @@ include_directories(lib/imgui-docking/backends)
 include_directories(lib/imnodes)
 
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -flto -march=native")
+add_compile_definitions(KITTEN_MEMORY_DEBUG)
 
 add_executable(kitten main.cpp
         src/core/VulkanInstance.cpp

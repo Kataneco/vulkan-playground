@@ -99,8 +99,10 @@ public:
 };
 
 // Image resource node
+// TODO: Copy after resize
 class ImageResourceNode : public GraphNode {
 private:
+    VkDevice device;
     ResourceManager* resourceManager;
 public:
     VkFormat format;
@@ -111,15 +113,19 @@ public:
     std::shared_ptr<Image> image;
     std::shared_ptr<Sampler> meowSampler;
 
+    VkDescriptorPool descriptorPool;
     VkDescriptorSet meowTargetSet;
 
-    ImageResourceNode(int nodeId, ResourceManager* resourceManager)
+    ImageResourceNode(int nodeId, ResourceManager* resourceManager, VkDescriptorPool descriptorPool, VkDevice device)
         : GraphNode(nodeId, "Image"), resourceManager(resourceManager),
           format(VK_FORMAT_R8G8B8A8_SRGB),
           extent{1024, 1024, 1},
           mipLevels(1),
-          arrayLayers(1) {
-        auto meowSampler = resourceManager->createSampler({}, "ImageSampler"+std::to_string(nodeId));
+          arrayLayers(1),
+          descriptorPool(descriptorPool),
+          device(device)
+    {
+        meowSampler = resourceManager->createSampler({}, "ImageSampler"+std::to_string(id));
 
         Pin output;
         output.id = nodeId * 1000;
@@ -144,11 +150,33 @@ public:
 
         image->createImageView({.viewType = VK_IMAGE_VIEW_TYPE_2D, .format = image->getFormat(), .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1}});
 
-        meowTargetSet = ImGui_ImplVulkan_AddTexture(meowSampler->getSampler(), image->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        VkDescriptorSetLayout imguiLayout = ImGui_ImplVulkan_GetDescriptorSetLayout();
+        VkDescriptorSetAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo.descriptorPool = descriptorPool;
+        allocInfo.descriptorSetCount = 1;
+        allocInfo.pSetLayouts = &imguiLayout;
+        vkAllocateDescriptorSets(device, &allocInfo, &meowTargetSet);
+
+        VkDescriptorImageInfo imageInfo{};
+        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        imageInfo.imageView = image->getImageView();
+        imageInfo.sampler = meowSampler->getSampler();
+
+        VkWriteDescriptorSet writeMeow{};
+        writeMeow.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writeMeow.descriptorCount = 1;
+        writeMeow.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        writeMeow.dstSet = meowTargetSet;
+        writeMeow.dstBinding = 0;
+        writeMeow.pImageInfo = &imageInfo;
+
+        vkUpdateDescriptorSets(device, 1, &writeMeow, 0, nullptr);
     }
 
     ~ImageResourceNode() {
-        ImGui_ImplVulkan_RemoveTexture(meowTargetSet);
+        vkFreeDescriptorSets(device, descriptorPool, 1, &meowTargetSet);
+        resourceManager->destroySampler("ImageSampler"+std::to_string(id));
     }
 
     const char* GetTypeName() const override { return "Image Resource"; }
@@ -226,6 +254,8 @@ public:
         }
 
         if (update) {
+            vkFreeDescriptorSets(device, descriptorPool, 1, &meowTargetSet);
+
             image = resourceManager->createImage({
                   .imageType = VK_IMAGE_TYPE_2D,
                   .format = format,
@@ -240,23 +270,48 @@ public:
 
             image->createImageView({.viewType = VK_IMAGE_VIEW_TYPE_2D, .format = image->getFormat(), .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1}});
 
-            ImGui_ImplVulkan_RemoveTexture(meowTargetSet);
-            meowTargetSet = ImGui_ImplVulkan_AddTexture(meowSampler->getSampler(), image->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            VkDescriptorSetLayout imguiLayout = ImGui_ImplVulkan_GetDescriptorSetLayout();
+            VkDescriptorSetAllocateInfo allocInfo{};
+            allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+            allocInfo.descriptorPool = descriptorPool;
+            allocInfo.descriptorSetCount = 1;
+            allocInfo.pSetLayouts = &imguiLayout;
+            vkAllocateDescriptorSets(device, &allocInfo, &meowTargetSet);
+
+            VkDescriptorImageInfo imageInfo{};
+            imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            imageInfo.imageView = image->getImageView();
+            imageInfo.sampler = meowSampler->getSampler();
+
+            VkWriteDescriptorSet writeMeow{};
+            writeMeow.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            writeMeow.descriptorCount = 1;
+            writeMeow.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            writeMeow.dstSet = meowTargetSet;
+            writeMeow.dstBinding = 0;
+            writeMeow.pImageInfo = &imageInfo;
+
+            vkUpdateDescriptorSets(device, 1, &writeMeow, 0, nullptr);
         }
     }
 };
 
 // Buffer resource node
+// TODO: Copy after resize
 class BufferResourceNode : public GraphNode {
+private:
+    ResourceManager* resourceManager;
 public:
     size_t size;
     bool isUniform;
 
-    BufferResourceNode(int nodeId, bool uniform = true)
+    std::shared_ptr<Buffer> buffer;
+
+    BufferResourceNode(int nodeId, ResourceManager* resourceManager, bool uniform = true)
         : GraphNode(nodeId, uniform ? "Uniform Buffer" : "Storage Buffer"),
           size(256),
-          isUniform(uniform) {
-
+          isUniform(uniform),
+          resourceManager(resourceManager) {
         Pin output;
         output.id = nodeId * 1000;
         output.name = "Buffer";
@@ -264,6 +319,8 @@ public:
         output.type = uniform ? PinType::UniformBuffer : PinType::StorageBuffer;
         output.size = size;
         outputs.push_back(output);
+
+        buffer = resourceManager->createBuffer({.size = size, .usage = static_cast<VkBufferUsageFlags>((isUniform ? VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT : VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) | VK_BUFFER_USAGE_TRANSFER_DST_BIT)});
     }
 
     const char* GetTypeName() const override { return isUniform ? "Uniform Buffer" : "Storage Buffer"; }
@@ -289,10 +346,17 @@ public:
         ImGui::Text("%s Properties", GetTypeName());
         ImGui::Separator();
 
+        bool update = false;
+
         int sizeKB = size / 1024;
         if (ImGui::InputInt("Size (KB)", &sizeKB)) {
             size = std::max(1, sizeKB) * 1024;
             outputs[0].size = size;
+            update = true;
+        }
+
+        if (update) {
+            buffer = resourceManager->createBuffer({.size = size, .usage = static_cast<VkBufferUsageFlags>((isUniform ? VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT : VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) | VK_BUFFER_USAGE_TRANSFER_DST_BIT)});
         }
 
         ImGui::Text("Size in bytes: %zu", size);
@@ -579,16 +643,17 @@ private:
 
     ImNodesEditorContext* editorContext = nullptr;
 
+    VkDevice device;
     MemoryAllocator memoryAllocator;
     ResourceManager resourceManager;
 
+    VkDescriptorPool descriptorPool;
+
 public:
-    VulkanNodeEditor(VulkanInstance& instance, Device& device) : memoryAllocator(instance, device), resourceManager(device, memoryAllocator) {
+    VulkanNodeEditor(VulkanInstance& instance, Device& device) : memoryAllocator(instance, device), resourceManager(device, memoryAllocator), device(device) {
         editorContext = ImNodes::EditorContextCreate();
         ImNodes::EditorContextSet(editorContext);
         ImNodes::StyleColorsDark();
-
-        // Vulkan-themed colors
         ImNodes::PushColorStyle(ImNodesCol_NodeBackground, IM_COL32(30, 30, 40, 255));
         ImNodes::PushColorStyle(ImNodesCol_NodeBackgroundHovered, IM_COL32(40, 40, 50, 255));
         ImNodes::PushColorStyle(ImNodesCol_NodeBackgroundSelected, IM_COL32(50, 50, 70, 255));
@@ -600,19 +665,54 @@ public:
         ImNodes::PushColorStyle(ImNodesCol_LinkSelected, IM_COL32(255, 200, 100, 255));
         ImNodes::PushColorStyle(ImNodesCol_Pin, IM_COL32(100, 100, 150, 255));
         ImNodes::PushColorStyle(ImNodesCol_PinHovered, IM_COL32(150, 150, 200, 255));
+
+        // Descriptor sets for ImGui
+        std::vector<std::pair<VkDescriptorType, float>> poolSizes =
+        {
+            {VK_DESCRIPTOR_TYPE_SAMPLER,                0.5f},
+            {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4.f},
+            {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,          4.f},
+            {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,          1.f},
+            {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,   1.f},
+            {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER,   1.f},
+            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,         2.f},
+            {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,         2.f},
+            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1.f},
+            {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1.f},
+            {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,       0.5f}
+        };
+
+        //Copied from descriptor/DescriptorSetManager
+        size_t count = 1024;
+        std::vector<VkDescriptorPoolSize> sizes;
+        sizes.reserve(poolSizes.size());
+        for (auto sz: poolSizes) {
+            sizes.push_back({sz.first, static_cast<uint32_t>(sz.second * count)});
+        }
+        VkDescriptorPoolCreateInfo pool_info = {};
+        pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+        pool_info.maxSets = count;
+        pool_info.poolSizeCount = static_cast<uint32_t>(sizes.size());
+        pool_info.pPoolSizes = sizes.data();
+
+        vkCreateDescriptorPool(device, &pool_info, nullptr, &descriptorPool);
     }
 
     ~VulkanNodeEditor() {
         ImNodes::EditorContextFree(editorContext);
+        links.clear();
+        nodes.clear();
+        vkDestroyDescriptorPool(device, descriptorPool, nullptr);
     }
 
     void AddImageNode() {
-        auto node = std::make_unique<ImageResourceNode>(nextNodeId++, &resourceManager);
+        auto node = std::make_unique<ImageResourceNode>(nextNodeId++, &resourceManager, descriptorPool, device);
         nodes[node->id] = std::move(node);
     }
 
     void AddBufferNode(bool uniform = true) {
-        auto node = std::make_unique<BufferResourceNode>(nextNodeId++, uniform);
+        auto node = std::make_unique<BufferResourceNode>(nextNodeId++, &resourceManager, uniform);
         nodes[node->id] = std::move(node);
     }
 

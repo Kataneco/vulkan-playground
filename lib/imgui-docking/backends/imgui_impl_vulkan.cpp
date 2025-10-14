@@ -2243,6 +2243,12 @@ void ImGui_ImplVulkan_ShutdownMultiViewportSupport()
     ImGui::DestroyPlatformWindows();
 }
 
+VkDescriptorSetLayout ImGui_ImplVulkan_GetDescriptorSetLayout()
+{
+    ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
+    return bd->DescriptorSetLayout;
+}
+
 //-----------------------------------------------------------------------------
 
 #endif // #ifndef IMGUI_DISABLE

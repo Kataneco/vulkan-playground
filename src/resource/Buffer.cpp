@@ -6,6 +6,9 @@ Buffer::Buffer(VkDevice device, VmaAllocator allocator, const VkBufferCreateInfo
 
 Buffer::~Buffer() {
     Buffer::destroy();
+#ifdef KITTEN_MEMORY_DEBUG
+    std::clog << "Destroyed buffer: " << name << std::endl;
+#endif
 }
 
 void Buffer::destroy() {

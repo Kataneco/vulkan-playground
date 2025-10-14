@@ -123,8 +123,6 @@ int main(int argc, char* argv[]) {
     style.GrabRounding = 1;
     style.GrabMinSize = 20;
     style.FrameRounding = 3;
-
-
     style.Colors[ImGuiCol_Text] = ImVec4(0.00f, 1.00f, 1.00f, 1.00f);
     style.Colors[ImGuiCol_TextDisabled] = ImVec4(0.00f, 0.40f, 0.41f, 1.00f);
     style.Colors[ImGuiCol_WindowBg] = ImVec4(0.00f, 0.00f, 0.00f, 1.00f);
@@ -170,15 +168,13 @@ int main(int argc, char* argv[]) {
     //ImGui_ImplVulkan_LoadFunctions(VK_API_VERSION_1_3, [](const char *function_name, void *data) {void** idarr = *reinterpret_cast<void ***>(data); PFN_vkVoidFunction instanceAddr = vkGetInstanceProcAddr(static_cast<VkInstance>(idarr[0]), function_name); PFN_vkVoidFunction deviceAddr = vkGetDeviceProcAddr(static_cast<VkDevice>(idarr[1]), function_name); return deviceAddr ? deviceAddr : instanceAddr; }, &instance_device);
 
     ImGui_ImplVulkan_InitInfo init_info = {};
-    init_info.ApiVersion = VK_API_VERSION_1_3;              // Pass in your value of VkApplicationInfo::apiVersion, otherwise will default to header version.
+    init_info.ApiVersion = VK_API_VERSION_1_3;
     init_info.Instance = instance;
     init_info.PhysicalDevice = device;
     init_info.Device = device;
     init_info.QueueFamily = device.getGraphicsFamily();
     init_info.Queue = device.getGraphicsQueue();
-    //init_info.PipelineCache = g_PipelineCache;
-    //init_info.DescriptorPool = g_DescriptorPool;
-    init_info.DescriptorPoolSize = 1024;
+    init_info.DescriptorPoolSize = 128;
     init_info.MinImageCount = swapchain.getImageCount();
     init_info.ImageCount = swapchain.getImageCount();
     init_info.Allocator = nullptr;
