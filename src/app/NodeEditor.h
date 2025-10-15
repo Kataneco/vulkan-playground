@@ -830,7 +830,7 @@ public:
         }
     }
 
-    VkSemaphore getHandle() const { return handle ? *handle : VK_NULL_HANDLE; }
+    VkSemaphore getHandle() const { return handle ? static_cast<VkSemaphore>(*handle) : VK_NULL_HANDLE; }
     std::string summary() const { return "Binary semaphore"; }
 
 private:
@@ -891,7 +891,7 @@ public:
         }
     }
 
-    VkFence getHandle() const { return fence ? *fence : VK_NULL_HANDLE; }
+    VkFence getHandle() const { return fence ? static_cast<VkFence>(*fence) : VK_NULL_HANDLE; }
     std::string summary() const { return signaled ? "Signaled fence" : "Fence"; }
 
 private:
@@ -1690,6 +1690,7 @@ public:
         , resourceManager(device, memoryAllocator)
         , stagingManager(device) {
         editorContext = ImNodes::EditorContextCreate();
+        ImNodes::CreateContext();
         ImNodes::EditorContextSet(editorContext);
         ImNodes::StyleColorsDark();
 

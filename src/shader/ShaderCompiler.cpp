@@ -37,7 +37,7 @@ ShaderCompiler::Result ShaderCompiler::compileGlsl(const std::string& source,
 
     for (const auto& dir : includeDirs) {
         if (!dir.empty()) {
-            options.AddIncludeDirectory(dir.string());
+            //options.AddIncludeDirectory(dir.string());
         }
     }
 

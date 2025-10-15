@@ -3,10 +3,11 @@
 #include <filesystem>
 #include <string>
 
-#include <imnodes.h>
-#include <imgui.h>
-#include <imgui_impl_glfw.h>
-#include <imgui_impl_vulkan.h>
+#include "imnodes.h"
+#include "imgui.h"
+#include "imgui_internal.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_vulkan.h"
 
 #include "app/NodeEditor.h"
 #include "app/Renderer.h"
