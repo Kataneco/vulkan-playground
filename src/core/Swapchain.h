@@ -16,6 +16,7 @@ public:
 
     uint32_t acquireNextImage(VkSemaphore semaphore, VkFence fence);
     uint32_t present(uint32_t imageIndex, VkSemaphore waitSemaphore);
+    void recreate();
 
 private:
     void create();
