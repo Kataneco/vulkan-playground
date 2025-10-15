@@ -115,23 +115,7 @@ add_executable(kitten main.cpp
         lib/imgui-docking/misc/cpp/imgui_stdlib.cpp
 )
 
-find_package(shaderc QUIET)
-
-if (shaderc_FOUND)
-    target_link_libraries(kitten PRIVATE shaderc::shaderc)
-else ()
-    find_library(SHADERC_LIB NAMES shaderc_combined shaderc)
-    if (NOT SHADERC_LIB)
-        message(FATAL_ERROR "shaderc library is required to build the runtime shader compiler")
-    endif ()
-    find_path(SHADERC_INCLUDE_DIR shaderc/shaderc.hpp)
-    if (SHADERC_INCLUDE_DIR)
-        target_include_directories(kitten PRIVATE ${SHADERC_INCLUDE_DIR})
-    endif ()
-    target_link_libraries(kitten PRIVATE ${SHADERC_LIB})
-endif ()
-
-target_link_libraries(kitten glfw X11)
+target_link_libraries(kitten glfw X11 shaderc_shared)
 
 #Shader compilation
 find_program(GLSLC_EXECUTABLE glslc)

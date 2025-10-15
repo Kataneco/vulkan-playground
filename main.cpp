@@ -1,6 +1,5 @@
-#include <exception>
-#include <iostream>
-
+#define KITTY_MAIN
+#include "util/VulkanUtils.h"
 #include "app/Application.h"
 #include "util/Window.h"
 
