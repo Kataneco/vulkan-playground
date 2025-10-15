@@ -16,6 +16,19 @@ include_directories(lib/imnodes)
 add_compile_definitions(KITTEN_MEMORY_DEBUG)
 
 add_executable(kitten main.cpp
+        src/app/Application.cpp
+        src/app/Application.h
+        src/app/Renderer.cpp
+        src/app/Renderer.h
+        src/app/EditorUI.cpp
+        src/app/EditorUI.h
+        src/app/ShaderWorkspace.cpp
+        src/app/ShaderWorkspace.h
+        src/app/ViewportRenderer.cpp
+        src/app/ViewportRenderer.h
+        src/app/NodeEditor.h
+        src/shader/ShaderCompiler.cpp
+        src/shader/ShaderCompiler.h
         src/core/VulkanInstance.cpp
         src/core/VulkanInstance.h
         src/core/Device.cpp
@@ -84,7 +97,6 @@ add_executable(kitten main.cpp
         src/experimental/voxelizer.h
         src/alphyslab/node.cpp
         src/alphyslab/node.h
-        ui.h
         lib/imgui-docking/imgui.cpp
         lib/imgui-docking/imgui_demo.cpp
         lib/imgui-docking/imgui_draw.cpp
@@ -102,6 +114,22 @@ add_executable(kitten main.cpp
         lib/TextEditor.h
         lib/imgui-docking/misc/cpp/imgui_stdlib.cpp
 )
+
+find_package(shaderc QUIET)
+
+if (shaderc_FOUND)
+    target_link_libraries(kitten PRIVATE shaderc::shaderc)
+else ()
+    find_library(SHADERC_LIB NAMES shaderc_combined shaderc)
+    if (NOT SHADERC_LIB)
+        message(FATAL_ERROR "shaderc library is required to build the runtime shader compiler")
+    endif ()
+    find_path(SHADERC_INCLUDE_DIR shaderc/shaderc.hpp)
+    if (SHADERC_INCLUDE_DIR)
+        target_include_directories(kitten PRIVATE ${SHADERC_INCLUDE_DIR})
+    endif ()
+    target_link_libraries(kitten PRIVATE ${SHADERC_LIB})
+endif ()
 
 target_link_libraries(kitten glfw X11)
 
