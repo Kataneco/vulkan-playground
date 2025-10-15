@@ -103,7 +103,7 @@ add_executable(kitten main.cpp
         lib/imgui-docking/misc/cpp/imgui_stdlib.cpp
 )
 
-target_link_libraries(kitten glfw X11)
+target_link_libraries(kitten glfw X11 shaderc_shared)
 
 #Shader compilation
 find_program(GLSLC_EXECUTABLE glslc)
