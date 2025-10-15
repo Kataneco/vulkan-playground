@@ -132,3 +132,8 @@ uint32_t Swapchain::present(uint32_t imageIndex, VkSemaphore waitSemaphore) {
     }
     return 0;
 }
+
+void Swapchain::recreate() {
+    device.waitIdle();
+    create();
+}
