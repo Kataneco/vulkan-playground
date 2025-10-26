@@ -1,4 +1,3 @@
-// VulkanNodeEditor.h
 #pragma once
 #include <imgui.h>
 #include <imnodes.h>
@@ -8,10 +7,8 @@
 #include <memory>
 #include <fstream>
 
-// Your engine includes
 #include <shader/ShaderReflection.h>
 
-// Pin types based on Vulkan descriptor types
 enum class PinType {
     UniformBuffer,
     StorageBuffer,
@@ -50,37 +47,30 @@ VkDescriptorType PinTypeToDescriptorType(PinType type) {
     }
 }
 
-// Pin represents a shader binding or resource output
 struct Pin {
     int id;
     std::string name;
     bool isInput;
     PinType type;
 
-    // For descriptor bindings
     uint32_t set = 0;
     uint32_t binding = 0;
     VkShaderStageFlags stages = 0;
 
-    // For buffers
     size_t size = 0;
 
-    // For images
     VkFormat format = VK_FORMAT_UNDEFINED;
     VkExtent3D extent = {0, 0, 0};
 
-    // For vertex inputs/fragment outputs
     uint32_t location = 0;
 };
 
-// Link between two pins
 struct Link {
     int id;
     int startPinId;
     int endPinId;
 };
 
-// Base node class
 class GraphNode {
 public:
     int id;
@@ -98,7 +88,6 @@ public:
     virtual const char* GetTypeName() const = 0;
 };
 
-// Image resource node
 // TODO: Copy after resize
 class ImageResourceNode : public GraphNode {
 private:
@@ -296,7 +285,6 @@ public:
     }
 };
 
-// Buffer resource node
 // TODO: Copy after resize
 class BufferResourceNode : public GraphNode {
 private:
@@ -363,7 +351,6 @@ public:
     }
 };
 
-// Shader node with reflection support
 class ShaderGraphNode : public GraphNode {
 public:
     std::string shaderPath;
@@ -394,7 +381,6 @@ public:
     bool LoadShader(const std::string& path) {
         shaderPath = path;
 
-        // Read SPIR-V file
         std::ifstream file(path, std::ios::ate | std::ios::binary);
         if (!file.is_open()) {
             std::cerr << "Failed to open shader: " << path << std::endl;
@@ -407,12 +393,10 @@ public:
         file.read(reinterpret_cast<char*>(spirvCode.data()), fileSize);
         file.close();
 
-        // Create reflection
         std::string spirvString(reinterpret_cast<const char*>(spirvCode.data()),
                                spirvCode.size() * sizeof(uint32_t));
         reflection = std::make_unique<ShaderReflection>(spirvString);
 
-        // Populate pins from reflection
         PopulateFromReflection();
 
         loaded = true;
