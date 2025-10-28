@@ -8,6 +8,7 @@
 #include <fstream>
 
 #include <shader/ShaderReflection.h>
+#include <shader/ShaderCompiler.h>
 
 enum class PinType {
     UniformBuffer,
@@ -32,6 +33,8 @@ const char* PinTypeToString(PinType type) {
         case PinType::PushConstant: return "Push Constants";
         case PinType::VertexInput: return "Vertex Input";
         case PinType::FragmentOutput: return "Fragment Output";
+        case PinType::ShaderStageIn: return "Shader Stage In";
+        case PinType::ShaderStageOut: return "Shader Stage Out";
         default: return "Unknown";
     }
 }
@@ -650,7 +653,6 @@ public:
         ImNodes::PushColorStyle(ImNodesCol_Pin, IM_COL32(100, 100, 150, 255));
         ImNodes::PushColorStyle(ImNodesCol_PinHovered, IM_COL32(150, 150, 200, 255));
 
-        // Descriptor sets for ImGui
         std::vector<std::pair<VkDescriptorType, float>> poolSizes =
         {
             {VK_DESCRIPTOR_TYPE_SAMPLER,                0.5f},
@@ -739,6 +741,7 @@ public:
                 if (ImGui::MenuItem("Vertex Shader")) AddShaderNode(VK_SHADER_STAGE_VERTEX_BIT);
                 if (ImGui::MenuItem("Fragment Shader")) AddShaderNode(VK_SHADER_STAGE_FRAGMENT_BIT);
                 if (ImGui::MenuItem("Compute Shader")) AddShaderNode(VK_SHADER_STAGE_COMPUTE_BIT);
+                if (ImGui::MenuItem("Geometry Shader")) AddShaderNode(VK_SHADER_STAGE_GEOMETRY_BIT);
                 ImGui::EndMenu();
             }
             ImGui::EndMenuBar();

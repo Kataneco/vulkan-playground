@@ -329,7 +329,7 @@ int main(int argc, char* argv[]) {
             ImGui::DockBuilderDockWindow("Viewport", dock_down);
             ImGui::DockBuilderDockWindow("Shader Graph Editor", dockspace_main_id);
             ImGui::DockBuilderDockWindow("Node Properties", dock_right);
-            ImGui::DockBuilderDockWindow("TextEditor", dock_text);
+            ImGui::DockBuilderDockWindow("Text Editor", dock_text);
             ImGui::DockBuilderFinish(dockspace_id);
         }
 
@@ -341,8 +341,8 @@ int main(int argc, char* argv[]) {
         //ImGui::Text("size = %d x %d", static_cast<int>(viewportSize.x), static_cast<int>(viewportSize.y));
         ImGui::End();
 
-        ImGui::Begin("TextEditor");
-        editor.Render("Text Editor");
+        ImGui::Begin("Text Editor");
+        editor.Render("Notes");
         ImGui::End();
 
         ImGui::Render();
