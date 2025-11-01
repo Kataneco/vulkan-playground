@@ -8,6 +8,7 @@ std::vector<uint32_t> compileGLSL(const std::string& code, shaderc_shader_kind k
     options.SetSourceLanguage(shaderc_source_language::shaderc_source_language_glsl);
     options.SetTargetEnvironment(shaderc_target_env::shaderc_target_env_vulkan, shaderc_env_version::shaderc_env_version_vulkan_1_3);
     options.SetWarningsAsErrors();
+    options.SetGenerateDebugInfo();
 
     shaderc::SpvCompilationResult module = compiler.CompileGlslToSpv(code, kind, "shader", options);
 
@@ -30,6 +31,7 @@ std::vector<uint32_t> compileHLSL(const std::string& code, shaderc_shader_kind k
     options.SetSourceLanguage(shaderc_source_language::shaderc_source_language_hlsl);
     options.SetTargetEnvironment(shaderc_target_env::shaderc_target_env_vulkan, shaderc_env_version::shaderc_env_version_vulkan_1_3);
     options.SetWarningsAsErrors();
+    options.SetGenerateDebugInfo();
 
     shaderc::SpvCompilationResult module = compiler.CompileGlslToSpv(code, kind, "shader", options);
 

@@ -117,6 +117,7 @@ int main(int argc, char* argv[]) {
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // IF using Docking Branch
 
+    // TODO: move styling to headers
     ImGuiStyle& style = ImGui::GetStyle();
     style.Alpha = 1.0;
     style.WindowRounding = 3;
@@ -174,7 +175,7 @@ int main(int argc, char* argv[]) {
     init_info.Device = device;
     init_info.QueueFamily = device.getGraphicsFamily();
     init_info.Queue = device.getGraphicsQueue();
-    init_info.DescriptorPoolSize = 128;
+    init_info.DescriptorPoolSize = 512;
     init_info.MinImageCount = swapchain.getImageCount();
     init_info.ImageCount = swapchain.getImageCount();
     init_info.Allocator = nullptr;
@@ -184,13 +185,14 @@ int main(int argc, char* argv[]) {
     init_info.CheckVkResultFn = check_vk_result;
     ImGui_ImplVulkan_Init(&init_info);
 
-    // Node editor
-    VulkanNodeEditor nodeEditor(instance, device);
-
     // Text editor
     TextEditor editor;
     auto lang = TextEditor::LanguageDefinition::GLSL();
     editor.SetLanguageDefinition(lang);
+
+    // Node editor
+    VulkanNodeEditor nodeEditor(instance, device);
+    nodeEditor.SetTextEditor(&editor);  // NEW: Connect text editor to node editor
 
     // Viewport
     auto meowImage = resourceManager.createImage({
@@ -333,7 +335,9 @@ int main(int argc, char* argv[]) {
             ImGui::DockBuilderFinish(dockspace_id);
         }
 
-        nodeEditor.Draw();
+        commandBuffer.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+
+        nodeEditor.Draw(commandBuffer);
 
         ImGui::Begin("Viewport");
         ImVec2 viewportSize = ImGui::GetContentRegionAvail();
@@ -342,13 +346,29 @@ int main(int argc, char* argv[]) {
         ImGui::End();
 
         ImGui::Begin("Text Editor");
-        editor.Render("Notes");
+        auto cpos = editor.GetCursorPosition();
+        /*
+        ImGui::Text("",
+            cpos.mLine + 1, cpos.mColumn + 1, editor.GetTotalLines(),
+            //editor.IsOverwrite() ? "Ovr" : "Ins",
+            //editor.CanUndo() ? "*" : " ",
+            editor.GetLanguageDefinition().mName.c_str());
+        */
+
+        // NEW: Add save button to sync changes back to node
+        if (ImGui::Button("Save")) {
+            nodeEditor.SaveCurrentShaderEdit();
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("(Auto-saves on node switch)");
+
+        editor.Render("Shader Editor");
         ImGui::End();
 
         ImGui::Render();
         ImDrawData* main_draw_data = ImGui::GetDrawData();
 
-        commandBuffer.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+        //commandBuffer.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
         meowRenderPass.begin(commandBuffer, meowFramebuffer, {.extent = {static_cast<uint32_t>(viewportSize.x)*0+2048, 2048+0*static_cast<uint32_t>(viewportSize.y)}}, {{.color = {0.0f, 0.0f, 0.0f, 0.0f}}, {.depthStencil = {1.0f, 0}}});
 

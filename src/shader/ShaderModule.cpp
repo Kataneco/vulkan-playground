@@ -14,8 +14,18 @@ VkShaderModule createShaderModule(VkDevice device, const std::string &code) {
     VkShaderModule shaderModule;
     VkShaderModuleCreateInfo shaderModuleCreateInfo{};
     shaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    shaderModuleCreateInfo.codeSize = code.size();
+    shaderModuleCreateInfo.codeSize = code.size()*sizeof(code[0]);
     shaderModuleCreateInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
+    vkCreateShaderModule(device, &shaderModuleCreateInfo, nullptr, &shaderModule);
+    return shaderModule;
+}
+
+VkShaderModule createShaderModule(VkDevice device, const std::vector<uint32_t> &code) {
+    VkShaderModule shaderModule;
+    VkShaderModuleCreateInfo shaderModuleCreateInfo{};
+    shaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    shaderModuleCreateInfo.codeSize = code.size()*sizeof(code[0]);
+    shaderModuleCreateInfo.pCode = code.data();
     vkCreateShaderModule(device, &shaderModuleCreateInfo, nullptr, &shaderModule);
     return shaderModule;
 }
@@ -25,6 +35,10 @@ ShaderModule::ShaderModule(VkDevice device, size_t codeSize, const char *code) :
 }
 
 ShaderModule::ShaderModule(VkDevice device, const std::string &code) : device(device), shaderModule(VK_NULL_HANDLE) {
+    shaderModule = createShaderModule(device, code);
+}
+
+ShaderModule::ShaderModule(VkDevice device, const std::vector<uint32_t> &code) : device(device), shaderModule(VK_NULL_HANDLE) {
     shaderModule = createShaderModule(device, code);
 }
 

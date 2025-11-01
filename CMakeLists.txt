@@ -103,6 +103,7 @@ add_executable(kitten main.cpp
         lib/imgui-docking/misc/cpp/imgui_stdlib.cpp
         src/shader/ShaderCompiler.cpp
         src/shader/ShaderCompiler.h
+        imstyles.h
 )
 
 target_link_libraries(kitten glfw X11 shaderc_shared)
