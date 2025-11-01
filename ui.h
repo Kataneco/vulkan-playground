@@ -3,6 +3,7 @@
 #include <imnodes.h>
 #include <string>
 #include <vector>
+#include <algorithm>
 #include <unordered_map>
 #include <memory>
 #include <fstream>
@@ -114,18 +115,46 @@ struct PipelineBuilder {
     std::vector<ShaderGraphNode*> shaderChain;
     RenderTargetNode* renderTarget = nullptr;
 
+    struct AttachmentConfig {
+        int attachmentId = -1;
+        bool isDepth = false;
+        VkFormat format = VK_FORMAT_UNDEFINED;
+        VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
+        VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        VkAttachmentStoreOp storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        VkAttachmentLoadOp stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        VkAttachmentStoreOp stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        VkImageLayout initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        VkImageLayout finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        VkClearValue clearValue{};
+    };
+
     // Collected resources from all connected nodes
     std::unordered_map<int, std::pair<uint32_t, uint32_t>> descriptorBindings; // pinId -> (set, binding)
     std::vector<VkVertexInputAttributeDescription> vertexAttributes;
-    std::vector<VkFormat> colorAttachmentFormats;
+    std::vector<AttachmentConfig> attachments;
+    std::vector<VkClearValue> clearValues;
 
     VkPipeline pipeline = VK_NULL_HANDLE;
+    std::unique_ptr<RenderPass> renderPass;
+    std::unique_ptr<Framebuffer> framebuffer;
+    uint64_t renderTargetRevision = 0;
 
     VkViewport viewport{};
     VkRect2D scissor{};
 
     bool IsValid() const {
         return vertexShader && fragmentShader && renderTarget;
+    }
+
+    void InvalidateGraphicsObjects(VkDevice device) {
+        if (pipeline != VK_NULL_HANDLE) {
+            vkDestroyPipeline(device, pipeline, nullptr);
+            pipeline = VK_NULL_HANDLE;
+        }
+        renderPass.reset();
+        framebuffer.reset();
+        clearValues.clear();
     }
 };
 
@@ -391,33 +420,174 @@ public:
 
 class RenderTargetNode : public GraphNode {
 private:
+    struct Attachment {
+        int id = 0;
+        std::string name;
+        bool isDepth = false;
+        VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
+        VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
+        bool shaderReadable = true;
+        bool storage = false;
+        VkClearValue clearValue{};
+
+        std::shared_ptr<Image> image;
+        std::shared_ptr<Sampler> sampler;
+        VkDescriptorSet imguiSet = VK_NULL_HANDLE;
+    };
+
     VkDevice device;
     ResourceManager* resourceManager;
     VkDescriptorPool descriptorPool;
 
+    std::vector<Attachment> attachments;
+    int nextAttachmentId = 0;
+    int displayAttachmentIndex = 0;
+    uint64_t revision = 0;
+
+    static bool FormatHasStencil(VkFormat format) {
+        switch (format) {
+            case VK_FORMAT_D24_UNORM_S8_UINT:
+            case VK_FORMAT_D32_SFLOAT_S8_UINT:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    void DestroyAttachmentResources(Attachment& attachment) {
+        if (attachment.imguiSet != VK_NULL_HANDLE) {
+            ImGui_ImplVulkan_RemoveTexture(attachment.imguiSet);
+            attachment.imguiSet = VK_NULL_HANDLE;
+        }
+
+        if (attachment.sampler) {
+            resourceManager->destroySampler("RenderTargetSampler" + std::to_string(id) + "_" + std::to_string(attachment.id));
+            attachment.sampler.reset();
+        }
+
+        attachment.image.reset();
+    }
+
+    VkImageAspectFlags GetAspectFlags(const Attachment& attachment) const {
+        if (!attachment.isDepth) {
+            return VK_IMAGE_ASPECT_COLOR_BIT;
+        }
+
+        VkImageAspectFlags flags = VK_IMAGE_ASPECT_DEPTH_BIT;
+        if (FormatHasStencil(attachment.format)) {
+            flags |= VK_IMAGE_ASPECT_STENCIL_BIT;
+        }
+        return flags;
+    }
+
+    void CreateAttachmentResources(Attachment& attachment) {
+        VkImageUsageFlags usage = attachment.isDepth ? VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
+                                                     : VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        if (!attachment.isDepth) {
+            if (attachment.shaderReadable) usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
+            if (attachment.storage) usage |= VK_IMAGE_USAGE_STORAGE_BIT;
+        }
+
+        attachment.image = resourceManager->createImage({
+            .imageType = VK_IMAGE_TYPE_2D,
+            .format = attachment.format,
+            .extent = extent,
+            .mipLevels = 1,
+            .arrayLayers = 1,
+            .samples = attachment.samples,
+            .tiling = VK_IMAGE_TILING_OPTIMAL,
+            .usage = usage,
+        });
+
+        attachment.image->createImageView({
+            .viewType = VK_IMAGE_VIEW_TYPE_2D,
+            .format = attachment.format,
+            .subresourceRange = {GetAspectFlags(attachment), 0, 1, 0, 1}
+        });
+
+        if (!attachment.isDepth && attachment.shaderReadable) {
+            attachment.sampler = resourceManager->createSampler({}, "RenderTargetSampler" + std::to_string(id) + "_" + std::to_string(attachment.id));
+            attachment.imguiSet = ImGui_ImplVulkan_AddTexture(attachment.sampler->getSampler(), attachment.image->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        }
+    }
+
+    void RebuildAttachments() {
+        for (auto& attachment : attachments) {
+            DestroyAttachmentResources(attachment);
+        }
+
+        for (auto& attachment : attachments) {
+            CreateAttachmentResources(attachment);
+        }
+
+        if (displayAttachmentIndex >= static_cast<int>(attachments.size())) {
+            displayAttachmentIndex = static_cast<int>(attachments.size()) - 1;
+        }
+
+        if (displayAttachmentIndex < 0) {
+            displayAttachmentIndex = 0;
+        }
+
+        EnsureDisplayAttachmentValid();
+
+        revision++;
+    }
+
+    void EnsureDisplayAttachmentValid() {
+        if (attachments.empty()) {
+            displayAttachmentIndex = -1;
+            return;
+        }
+
+        if (displayAttachmentIndex < 0 || displayAttachmentIndex >= static_cast<int>(attachments.size()) || attachments[displayAttachmentIndex].isDepth || !attachments[displayAttachmentIndex].shaderReadable) {
+            displayAttachmentIndex = -1;
+            for (int i = 0; i < static_cast<int>(attachments.size()); ++i) {
+                if (!attachments[i].isDepth && attachments[i].shaderReadable) {
+                    displayAttachmentIndex = i;
+                    break;
+                }
+            }
+        }
+    }
+
+    Attachment& AddAttachmentInternal(const std::string& name, bool isDepth) {
+        Attachment attachment;
+        attachment.id = nextAttachmentId++;
+        attachment.name = name;
+        attachment.isDepth = isDepth;
+        if (isDepth) {
+            attachment.format = VK_FORMAT_D32_SFLOAT;
+            attachment.shaderReadable = false;
+            attachment.clearValue.depthStencil = {1.0f, 0};
+        } else {
+            attachment.format = VK_FORMAT_R8G8B8A8_SRGB;
+            attachment.shaderReadable = true;
+            attachment.clearValue.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
+        }
+        attachments.push_back(attachment);
+        return attachments.back();
+    }
+
 public:
-    VkFormat format;
+    struct AttachmentInfo {
+        int id;
+        bool isDepth;
+        VkFormat format;
+        VkSampleCountFlagBits samples;
+        bool shaderReadable;
+        bool storage;
+        VkClearValue clearValue;
+    };
+
     VkExtent3D extent;
 
-    std::shared_ptr<Image> targetImage;
-    std::shared_ptr<Sampler> sampler;
-    VkDescriptorSet displaySet;
-
-    // FIXME: WHAT THE FUCK?????????????????????
-    // FIXME: THIS IS FUCKING CURSED!!!
-    std::unique_ptr<RenderPass>* renderPassReference;
-    std::unique_ptr<Framebuffer> framebuffer;
-
-    RenderTargetNode(int nodeId, ResourceManager* resourceManager, VkDescriptorPool descriptorPool, VkDevice device, std::unique_ptr<RenderPass>* renderPass)
+    RenderTargetNode(int nodeId, ResourceManager* resourceManager, VkDescriptorPool descriptorPool, VkDevice device)
         : GraphNode(nodeId, "Render Target", NodeType::RenderTarget),
           resourceManager(resourceManager),
           descriptorPool(descriptorPool),
           device(device),
-          format(VK_FORMAT_R8G8B8A8_SRGB),
-          extent{1024, 1024, 1},
-          renderPassReference(renderPass)
+          extent{1024, 1024, 1}
     {
-        // Input pin for fragment shader output
         Pin input;
         input.id = nodeId * 1000;
         input.name = "Color";
@@ -426,70 +596,112 @@ public:
         input.location = 0;
         inputs.push_back(input);
 
-        CreateRenderTarget();
+        AddAttachmentInternal("Color 0", false);
+        RebuildAttachments();
     }
 
     ~RenderTargetNode() override {
-        if (displaySet != VK_NULL_HANDLE) {
-            //vkFreeDescriptorSets(device, descriptorPool, 1, &displaySet);
+        for (auto& attachment : attachments) {
+            DestroyAttachmentResources(attachment);
         }
-        resourceManager->destroySampler("RenderTargetSampler" + std::to_string(id));
-    }
-
-    void CreateRenderTarget() {
-        sampler = resourceManager->createSampler({}, "RenderTargetSampler" + std::to_string(id));
-
-        targetImage = resourceManager->createImage({
-            .imageType = VK_IMAGE_TYPE_2D,
-            .format = format,
-            .extent = extent,
-            .mipLevels = 1,
-            .arrayLayers = 1,
-            .samples = VK_SAMPLE_COUNT_1_BIT,
-            .tiling = VK_IMAGE_TILING_OPTIMAL,
-            .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-            //.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-        });
-
-        targetImage->createImageView({
-            .viewType = VK_IMAGE_VIEW_TYPE_2D,
-            .format = format,
-            .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}
-        });
-
-        // Create descriptor set for ImGui display
-        /*
-        VkDescriptorSetLayout imguiLayout = ImGui_ImplVulkan_GetDescriptorSetLayout();
-        VkDescriptorSetAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocInfo.descriptorPool = descriptorPool;
-        allocInfo.descriptorSetCount = 1;
-        allocInfo.pSetLayouts = &imguiLayout;
-        vkAllocateDescriptorSets(device, &allocInfo, &displaySet);
-
-        VkDescriptorImageInfo imageInfo{};
-        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        imageInfo.imageView = targetImage->getImageView();
-        imageInfo.sampler = sampler->getSampler();
-
-        VkWriteDescriptorSet write{};
-        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        write.descriptorCount = 1;
-        write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        write.dstSet = displaySet;
-        write.dstBinding = 0;
-        write.pImageInfo = &imageInfo;
-
-        vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
-        */
-
-        displaySet = ImGui_ImplVulkan_AddTexture(sampler->getSampler(), targetImage->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-        framebuffer = std::make_unique<Framebuffer>(device, **renderPassReference);
-        framebuffer->create({targetImage->getImageView()}, extent.width, extent.height);
     }
 
     const char* GetTypeName() const override { return "Render Target"; }
+
+    const std::vector<VkImageView> GetAttachmentViews() const {
+        std::vector<VkImageView> views;
+        views.reserve(attachments.size());
+        for (const auto& attachment : attachments) {
+            views.push_back(attachment.image ? attachment.image->getImageView() : VK_NULL_HANDLE);
+        }
+        return views;
+    }
+
+    std::vector<AttachmentInfo> GetAttachmentInfo() const {
+        std::vector<AttachmentInfo> info;
+        info.reserve(attachments.size());
+        for (const auto& attachment : attachments) {
+            info.push_back({attachment.id,
+                            attachment.isDepth,
+                            attachment.format,
+                            attachment.samples,
+                            attachment.shaderReadable,
+                            attachment.storage,
+                            attachment.clearValue});
+        }
+        return info;
+    }
+
+    bool IsAttachmentShaderReadable(int attachmentId) const {
+        for (const auto& attachment : attachments) {
+            if (attachment.id == attachmentId) {
+                return !attachment.isDepth && attachment.shaderReadable;
+            }
+        }
+        return false;
+    }
+
+    VkClearValue GetAttachmentClearValue(int attachmentId) const {
+        for (const auto& attachment : attachments) {
+            if (attachment.id == attachmentId) {
+                return attachment.clearValue;
+            }
+        }
+        VkClearValue value{};
+        value.color = {{0, 0, 0, 1}};
+        return value;
+    }
+
+    Attachment* FindAttachmentById(int attachmentId) {
+        for (auto& attachment : attachments) {
+            if (attachment.id == attachmentId) return &attachment;
+        }
+        return nullptr;
+    }
+
+    VkImage GetAttachmentImage(int attachmentId) const {
+        for (const auto& attachment : attachments) {
+            if (attachment.id == attachmentId && attachment.image) {
+                return attachment.image->getImage();
+            }
+        }
+        return VK_NULL_HANDLE;
+    }
+
+    VkFormat GetAttachmentFormat(int attachmentId) const {
+        for (const auto& attachment : attachments) {
+            if (attachment.id == attachmentId) {
+                return attachment.format;
+            }
+        }
+        return VK_FORMAT_UNDEFINED;
+    }
+
+    VkSampleCountFlagBits GetAttachmentSamples(int attachmentId) const {
+        for (const auto& attachment : attachments) {
+            if (attachment.id == attachmentId) {
+                return attachment.samples;
+            }
+        }
+        return VK_SAMPLE_COUNT_1_BIT;
+    }
+
+    void RemoveAttachment(int attachmentId) {
+        attachments.erase(std::remove_if(attachments.begin(), attachments.end(), [&](Attachment& attachment) {
+            if (attachment.id == attachmentId) {
+                DestroyAttachmentResources(attachment);
+                return true;
+            }
+            return false;
+        }), attachments.end());
+        EnsureDisplayAttachmentValid();
+    }
+
+    void MarkExtentDirty() {
+        RebuildAttachments();
+    }
+
+    uint64_t GetRevision() const { return revision; }
 
     void Draw() override {
         ImNodes::BeginNode(id);
@@ -502,13 +714,21 @@ public:
         ImGui::Text("← Color Output");
         ImNodes::EndInputAttribute();
 
-        //ImGui::Separator();
         ImGui::Text("Output: %dx%d", extent.width, extent.height);
 
-        float scale = 200.0f;
-        glm::vec2 size = glm::normalize(glm::vec2(extent.width, extent.height)) * scale;
-        ImGui::Image(displaySet, ImVec2(size.x, size.y));
-        //ImGui::Image(debugTexture, ImVec2(size.x, size.y));
+        EnsureDisplayAttachmentValid();
+        if (displayAttachmentIndex >= 0 && displayAttachmentIndex < static_cast<int>(attachments.size())) {
+            const auto& attachment = attachments[displayAttachmentIndex];
+            if (!attachment.isDepth && attachment.imguiSet != VK_NULL_HANDLE) {
+                float scale = 200.0f;
+                glm::vec2 size = glm::normalize(glm::vec2(extent.width, extent.height)) * scale;
+                ImGui::Image(attachment.imguiSet, ImVec2(size.x, size.y));
+            } else {
+                ImGui::TextDisabled("Attachment not sampleable");
+            }
+        } else {
+            ImGui::TextDisabled("No color attachment preview");
+        }
 
         ImNodes::EndNode();
     }
@@ -530,13 +750,125 @@ public:
         }
 
         if (needsUpdate) {
-            //vkFreeDescriptorSets(device, descriptorPool, 1, &displaySet);
-            ImGui_ImplVulkan_RemoveTexture(displaySet);
-            CreateRenderTarget();
+            RebuildAttachments();
+        }
+
+        if (ImGui::Button("Add Color Attachment")) {
+            AddAttachmentInternal("Color " + std::to_string(attachments.size()), false);
+            RebuildAttachments();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Add Depth Attachment")) {
+            AddAttachmentInternal("Depth", true);
+            RebuildAttachments();
+        }
+
+        ImGui::Separator();
+
+        static const VkFormat colorFormats[] = {
+            VK_FORMAT_R8G8B8A8_UNORM,
+            VK_FORMAT_R8G8B8A8_SRGB,
+            VK_FORMAT_B8G8R8A8_UNORM,
+            VK_FORMAT_R16G16B16A16_SFLOAT,
+        };
+        static const char* colorFormatLabels[] = {
+            "R8G8B8A8 UNORM",
+            "R8G8B8A8 SRGB",
+            "B8G8R8A8 UNORM",
+            "R16G16B16A16 SFLOAT",
+        };
+
+        static const VkFormat depthFormats[] = {
+            VK_FORMAT_D32_SFLOAT,
+            VK_FORMAT_D24_UNORM_S8_UINT,
+        };
+        static const char* depthFormatLabels[] = {
+            "D32 SFLOAT",
+            "D24 UNORM S8",
+        };
+
+        for (size_t i = 0; i < attachments.size(); ++i) {
+            auto& attachment = attachments[i];
+            ImGui::PushID(static_cast<int>(i));
+            if (ImGui::CollapsingHeader(attachment.name.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+                ImGui::Indent();
+                ImGui::Text("Attachment #%zu", i);
+                ImGui::Text("Format: %s", attachment.isDepth ? "Depth" : "Color");
+
+                bool attachmentChanged = false;
+
+                if (!attachment.isDepth) {
+                    int selectedFormat = 0;
+                    for (int fmtIndex = 0; fmtIndex < IM_ARRAYSIZE(colorFormats); ++fmtIndex) {
+                        if (colorFormats[fmtIndex] == attachment.format) {
+                            selectedFormat = fmtIndex;
+                            break;
+                        }
+                    }
+                    if (ImGui::Combo("Color Format", &selectedFormat, colorFormatLabels, IM_ARRAYSIZE(colorFormatLabels))) {
+                        attachment.format = colorFormats[selectedFormat];
+                        attachmentChanged = true;
+                    }
+
+                    if (ImGui::Checkbox("Shader Readable", &attachment.shaderReadable)) {
+                        attachmentChanged = true;
+                    }
+                    if (ImGui::Checkbox("Storage", &attachment.storage)) {
+                        attachmentChanged = true;
+                    }
+
+                    float clearColor[4] = {
+                        attachment.clearValue.color.float32[0],
+                        attachment.clearValue.color.float32[1],
+                        attachment.clearValue.color.float32[2],
+                        attachment.clearValue.color.float32[3]
+                    };
+                    if (ImGui::ColorEdit4("Clear Color", clearColor, ImGuiColorEditFlags_Float)) {
+                        attachment.clearValue.color = {{clearColor[0], clearColor[1], clearColor[2], clearColor[3]}};
+                    }
+                } else {
+                    int selectedFormat = 0;
+                    for (int fmtIndex = 0; fmtIndex < IM_ARRAYSIZE(depthFormats); ++fmtIndex) {
+                        if (depthFormats[fmtIndex] == attachment.format) {
+                            selectedFormat = fmtIndex;
+                            break;
+                        }
+                    }
+                    if (ImGui::Combo("Depth Format", &selectedFormat, depthFormatLabels, IM_ARRAYSIZE(depthFormatLabels))) {
+                        attachment.format = depthFormats[selectedFormat];
+                        attachmentChanged = true;
+                    }
+
+                    float clearDepth = attachment.clearValue.depthStencil.depth;
+                    if (ImGui::InputFloat("Clear Depth", &clearDepth)) {
+                        attachment.clearValue.depthStencil.depth = std::clamp(clearDepth, 0.0f, 1.0f);
+                    }
+                }
+
+                if (ImGui::Button("Remove Attachment")) {
+                    RemoveAttachment(attachment.id);
+                    RebuildAttachments();
+                    ImGui::PopID();
+                    ImGui::Unindent();
+                    continue;
+                }
+
+                if (attachmentChanged) {
+                    RebuildAttachments();
+                }
+
+                if (!attachment.isDepth && attachment.shaderReadable) {
+                    if (ImGui::RadioButton("Use For Preview", displayAttachmentIndex == static_cast<int>(i))) {
+                        displayAttachmentIndex = static_cast<int>(i);
+                    }
+                }
+
+                ImGui::Unindent();
+            }
+            ImGui::PopID();
         }
     }
 };
-
 class ShaderGraphNode : public GraphNode {
 public:
     std::string shaderPath;
@@ -975,8 +1307,6 @@ private:
     DescriptorLayoutCache descriptorLayoutCache;
     PipelineLayoutCache pipelineLayoutCache;
 
-    // FIXME: Temporary
-    std::unique_ptr<RenderPass> renderPass;
     VkQueue graphicsQueue;
 
     CommandPool commandPool;
@@ -1032,30 +1362,6 @@ public:
         // FIXME: WHATTT??!?!?!??!
         commandBuffers = commandPool.allocateCommandBuffers(1);
 
-        renderPass = std::make_unique<RenderPass>(device);
-        VkAttachmentDescription colorAttachment{};
-        colorAttachment.format = VK_FORMAT_R8G8B8A8_SRGB;
-        colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-        colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        colorAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        VkAttachmentReference colorAttachmentReference{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
-
-        VkSubpassDescription subpass{};
-        subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &colorAttachmentReference;
-
-        VkSubpassDependency subpassDependency{};
-        subpassDependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-        subpassDependency.dstSubpass = 0;
-        subpassDependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        subpassDependency.srcAccessMask = 0;
-        subpassDependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        subpassDependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-
-        renderPass->create({colorAttachment}, {subpass}, {subpassDependency});
     }
 
     ~VulkanNodeEditor() {
@@ -1081,7 +1387,7 @@ public:
     }
 
     void AddRenderTargetNode() {
-        auto node = std::make_unique<RenderTargetNode>(nextNodeId++, &resourceManager, descriptorPool, device, &renderPass);
+        auto node = std::make_unique<RenderTargetNode>(nextNodeId++, &resourceManager, descriptorPool, device);
         nodes[node->id] = std::move(node);
     }
 
@@ -1201,6 +1507,33 @@ public:
                     }
                 }
 
+                builder.attachments.clear();
+                auto attachmentInfos = rt->GetAttachmentInfo();
+                for (const auto& info : attachmentInfos) {
+                    PipelineBuilder::AttachmentConfig config;
+                    config.attachmentId = info.id;
+                    config.isDepth = info.isDepth;
+                    config.format = info.format;
+                    config.samples = info.samples;
+                    config.clearValue = info.clearValue;
+                    config.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+                    if (info.isDepth) {
+                        config.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+                        config.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+                        config.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+                        config.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+                        config.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+                    } else {
+                        config.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+                        config.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+                        config.finalLayout = info.shaderReadable ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+                                                                  : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+                    }
+                    builder.attachments.push_back(config);
+                }
+
+                builder.renderTargetRevision = rt->GetRevision();
+
                 detectedPipelines.push_back(builder);
             } else {
                 std::cout << "Invalid pipeline!!" << std::endl;
@@ -1227,12 +1560,82 @@ public:
                   << builder.renderTarget->extent.height << std::endl;
         std::cout << "  Descriptor Bindings: " << builder.descriptorBindings.size() << std::endl;
 
+        if (builder.attachments.empty()) {
+            std::cerr << "No attachments defined for render target" << std::endl;
+            return false;
+        }
+
+        builder.InvalidateGraphicsObjects(device);
 
         auto vertCode = builder.vertexShader->spirvCode;
         auto fragCode = builder.fragmentShader->spirvCode;
         ShaderModule vertModule(device, vertCode), fragModule(device, fragCode);
         ShaderReflection vertexShader(vertCode), fragmentShader(fragCode);
-        VkPipelineLayout pipelineLayout = pipelineLayoutCache.createPipelineLayout(vertexShader+fragmentShader);
+        VkPipelineLayout pipelineLayout = pipelineLayoutCache.createPipelineLayout(vertexShader + fragmentShader);
+
+        std::vector<VkAttachmentDescription> attachmentDescriptions;
+        attachmentDescriptions.reserve(builder.attachments.size());
+        std::vector<VkAttachmentReference> colorAttachmentRefs;
+        colorAttachmentRefs.reserve(builder.attachments.size());
+        VkAttachmentReference depthAttachmentRef{};
+        bool hasDepthAttachment = false;
+
+        builder.clearValues.clear();
+
+        for (size_t idx = 0; idx < builder.attachments.size(); ++idx) {
+            auto& attachment = builder.attachments[idx];
+            VkAttachmentDescription description{};
+            description.format = attachment.format;
+            description.samples = attachment.samples;
+            description.loadOp = attachment.loadOp;
+            description.storeOp = attachment.storeOp;
+            description.stencilLoadOp = attachment.isDepth ? attachment.stencilLoadOp : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+            description.stencilStoreOp = attachment.isDepth ? attachment.stencilStoreOp : VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            description.initialLayout = attachment.initialLayout;
+            description.finalLayout = attachment.finalLayout;
+            attachmentDescriptions.push_back(description);
+
+            if (attachment.isDepth) {
+                depthAttachmentRef.attachment = static_cast<uint32_t>(idx);
+                depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+                hasDepthAttachment = true;
+            } else {
+                VkAttachmentReference reference{};
+                reference.attachment = static_cast<uint32_t>(idx);
+                reference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+                colorAttachmentRefs.push_back(reference);
+            }
+
+            builder.clearValues.push_back(builder.renderTarget->GetAttachmentClearValue(attachment.attachmentId));
+        }
+
+        VkSubpassDescription subpass{};
+        subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        subpass.colorAttachmentCount = static_cast<uint32_t>(colorAttachmentRefs.size());
+        subpass.pColorAttachments = colorAttachmentRefs.empty() ? nullptr : colorAttachmentRefs.data();
+        if (hasDepthAttachment) {
+            subpass.pDepthStencilAttachment = &depthAttachmentRef;
+        }
+
+        VkSubpassDependency dependency{};
+        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+        dependency.dstSubpass = 0;
+        dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.srcAccessMask = 0;
+        dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        if (hasDepthAttachment) {
+            dependency.srcStageMask |= VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+            dependency.dstStageMask |= VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+            dependency.dstAccessMask |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        }
+
+        builder.renderPass = std::make_unique<RenderPass>(device);
+        builder.renderPass->create(attachmentDescriptions, {subpass}, {dependency});
+
+        builder.framebuffer = std::make_unique<Framebuffer>(device, *builder.renderPass);
+        auto views = builder.renderTarget->GetAttachmentViews();
+        builder.framebuffer->create(views, builder.renderTarget->extent.width, builder.renderTarget->extent.height);
 
         builder.viewport.width = static_cast<float>(builder.renderTarget->extent.width);
         builder.viewport.height = static_cast<float>(builder.renderTarget->extent.height);
@@ -1241,20 +1644,48 @@ public:
 
         builder.scissor.extent = {static_cast<uint32_t>(builder.renderTarget->extent.width), static_cast<uint32_t>(builder.renderTarget->extent.height)};
 
-        // TODO: Ability to run arbitrary vector buffers through pipelines
-        // TODO: Figure out how to customize render passes!!
-        builder.pipeline = GraphicsPipelineBuilder()
-        .setShaders(vertModule, fragModule)
-        .setViewportState(builder.viewport, builder.scissor)
-        .setRasterizationState(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE, 1.0f)
-        .setColorBlendState({alphaBlend})
-        .setDepthStencilState(VK_FALSE, VK_FALSE, VK_COMPARE_OP_LESS)
-        .setLayout(pipelineLayout)
-        .setRenderPass(*renderPass, 0)
-        .setDynamicState({VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR})
-        .build(device);
+        std::vector<VkPipelineColorBlendAttachmentState> colorBlendAttachments;
+        for (size_t i = 0; i < colorAttachmentRefs.size(); ++i) {
+            colorBlendAttachments.push_back(alphaBlend);
+        }
 
-        return true;
+        bool enableDepth = hasDepthAttachment;
+
+        VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT;
+        for (const auto& attachment : builder.attachments) {
+            if (static_cast<uint32_t>(attachment.samples) > static_cast<uint32_t>(sampleCount)) {
+                sampleCount = attachment.samples;
+            }
+        }
+
+        auto pipelineBuilder = GraphicsPipelineBuilder()
+            .setShaders(vertModule, fragModule)
+            .setViewportState(builder.viewport, builder.scissor)
+            .setRasterizationState(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE, 1.0f)
+            .setLayout(pipelineLayout)
+            .setRenderPass(*builder.renderPass, 0)
+            .setDynamicState({VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR});
+
+        if (!colorBlendAttachments.empty()) {
+            pipelineBuilder.setColorBlendState(colorBlendAttachments);
+        } else {
+            VkPipelineColorBlendAttachmentState dummy{};
+            dummy.blendEnable = VK_FALSE;
+            dummy.colorWriteMask = 0;
+            pipelineBuilder.setColorBlendState(dummy);
+        }
+
+        pipelineBuilder.setDepthStencilState(enableDepth ? VK_TRUE : VK_FALSE, enableDepth ? VK_TRUE : VK_FALSE, VK_COMPARE_OP_LESS);
+        pipelineBuilder.setMultisampleState(sampleCount);
+
+        builder.pipeline = pipelineBuilder.build(device);
+
+        if (builder.pipeline != VK_NULL_HANDLE) {
+            builder.renderTargetRevision = builder.renderTarget->GetRevision();
+            return true;
+        }
+
+        return false;
     }
 
     void SetTextEditor(TextEditor* editor) {
@@ -1292,23 +1723,15 @@ public:
     void Draw(CommandBuffer& commandBuffer) {
         //auto& commandBuffer = commandBuffers[0];
 
-        std::vector<RenderTargetNode*> renderTargets;
-        for (auto& [id, node] : nodes) {
-            if (node->nodeType == NodeType::RenderTarget) {
-                //std::cout << "Render target found " << node->name << std::endl;
-                renderTargets.push_back(dynamic_cast<RenderTargetNode*>(node.get()));
-            }
-        }
-
-        for (auto renderTarget: renderTargets) {
-            ResourceBarrier::transitionImageLayout(commandBuffer, renderTarget->targetImage->getImage(), renderTarget->format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-        }
-
         for (auto& pipeline: detectedPipelines) {
-            if (pipeline.pipeline != VK_NULL_HANDLE) {
-                ResourceBarrier::transitionImageLayout(commandBuffer, pipeline.renderTarget->targetImage->getImage(), pipeline.renderTarget->format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            if (pipeline.renderTarget && pipeline.renderTargetRevision != pipeline.renderTarget->GetRevision()) {
+                pipeline.InvalidateGraphicsObjects(device);
+            }
+            if (pipeline.pipeline != VK_NULL_HANDLE && pipeline.renderPass && pipeline.framebuffer) {
+                VkRect2D renderArea{};
+                renderArea.extent = {static_cast<uint32_t>(pipeline.renderTarget->extent.width), static_cast<uint32_t>(pipeline.renderTarget->extent.height)};
 
-                renderPass->begin(commandBuffer, *pipeline.renderTarget->framebuffer, {.extent = {static_cast<uint32_t>(pipeline.renderTarget->extent.width), static_cast<uint32_t>(pipeline.renderTarget->extent.height)}}, {{.color = {0.0f, 0.5f, 1.0f, 1.0f}}, {.depthStencil = {1.0f, 0}}});
+                pipeline.renderPass->begin(commandBuffer, *pipeline.framebuffer, renderArea, pipeline.clearValues);
 
                 vkCmdSetViewport(commandBuffer, 0, 1, &pipeline.viewport);
                 vkCmdSetScissor(commandBuffer, 0, 1, &pipeline.scissor);
@@ -1318,9 +1741,7 @@ public:
                 //commandBuffer.pushConstants(pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(data), &data);
                 commandBuffer.draw(3);
 
-                renderPass->end(commandBuffer);
-
-                ResourceBarrier::transitionImageLayout(commandBuffer, pipeline.renderTarget->targetImage->getImage(), pipeline.renderTarget->format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                pipeline.renderPass->end(commandBuffer);
             }
         }
 
@@ -1511,6 +1932,164 @@ public:
                         pipeline.renderTarget->extent.width,
                         pipeline.renderTarget->extent.height);
                     ImGui::BulletText("Resources: %zu", pipeline.descriptorBindings.size());
+
+                    ImGui::Separator();
+                    ImGui::Text("Render Pass Attachments");
+
+                    static const char* loadOpLabels[] = {"Load", "Clear", "Don't Care"};
+                    static const VkAttachmentLoadOp loadOpValues[] = {
+                        VK_ATTACHMENT_LOAD_OP_LOAD,
+                        VK_ATTACHMENT_LOAD_OP_CLEAR,
+                        VK_ATTACHMENT_LOAD_OP_DONT_CARE
+                    };
+                    static const char* storeOpLabels[] = {"Store", "Don't Care"};
+                    static const VkAttachmentStoreOp storeOpValues[] = {
+                        VK_ATTACHMENT_STORE_OP_STORE,
+                        VK_ATTACHMENT_STORE_OP_DONT_CARE
+                    };
+
+                    static const char* colorLayoutLabels[] = {
+                        "Undefined",
+                        "Color Attachment",
+                        "Shader Read",
+                        "General",
+                        "Present"
+                    };
+                    static const VkImageLayout colorLayoutValues[] = {
+                        VK_IMAGE_LAYOUT_UNDEFINED,
+                        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                        VK_IMAGE_LAYOUT_GENERAL,
+                        VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+                    };
+
+                    static const char* depthLayoutLabels[] = {
+                        "Undefined",
+                        "Depth/Stencil Write",
+                        "Depth/Stencil Read"
+                    };
+                    static const VkImageLayout depthLayoutValues[] = {
+                        VK_IMAGE_LAYOUT_UNDEFINED,
+                        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                        VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+                    };
+
+                    bool attachmentSettingsChanged = false;
+                    for (size_t attachmentIndex = 0; attachmentIndex < pipeline.attachments.size(); ++attachmentIndex) {
+                        auto& attachment = pipeline.attachments[attachmentIndex];
+                        ImGui::PushID(static_cast<int>(attachmentIndex));
+                        if (ImGui::TreeNode((std::string("Attachment ") + std::to_string(attachmentIndex)).c_str())) {
+                            ImGui::Text("Type: %s", attachment.isDepth ? "Depth" : "Color");
+                            ImGui::Text("Format: %d", static_cast<int>(attachment.format));
+
+                            int loadOpIndex = 0;
+                            for (int idx = 0; idx < IM_ARRAYSIZE(loadOpValues); ++idx) {
+                                if (loadOpValues[idx] == attachment.loadOp) {
+                                    loadOpIndex = idx;
+                                    break;
+                                }
+                            }
+                            if (ImGui::Combo("Load Op", &loadOpIndex, loadOpLabels, IM_ARRAYSIZE(loadOpLabels))) {
+                                attachment.loadOp = loadOpValues[loadOpIndex];
+                                attachmentSettingsChanged = true;
+                            }
+
+                            int storeOpIndex = 0;
+                            for (int idx = 0; idx < IM_ARRAYSIZE(storeOpValues); ++idx) {
+                                if (storeOpValues[idx] == attachment.storeOp) {
+                                    storeOpIndex = idx;
+                                    break;
+                                }
+                            }
+                            if (ImGui::Combo("Store Op", &storeOpIndex, storeOpLabels, IM_ARRAYSIZE(storeOpLabels))) {
+                                attachment.storeOp = storeOpValues[storeOpIndex];
+                                attachmentSettingsChanged = true;
+                            }
+
+                            if (attachment.isDepth) {
+                                int stencilLoadIndex = 0;
+                                for (int idx = 0; idx < IM_ARRAYSIZE(loadOpValues); ++idx) {
+                                    if (loadOpValues[idx] == attachment.stencilLoadOp) {
+                                        stencilLoadIndex = idx;
+                                        break;
+                                    }
+                                }
+                                if (ImGui::Combo("Stencil Load", &stencilLoadIndex, loadOpLabels, IM_ARRAYSIZE(loadOpLabels))) {
+                                    attachment.stencilLoadOp = loadOpValues[stencilLoadIndex];
+                                    attachmentSettingsChanged = true;
+                                }
+
+                                int stencilStoreIndex = 0;
+                                for (int idx = 0; idx < IM_ARRAYSIZE(storeOpValues); ++idx) {
+                                    if (storeOpValues[idx] == attachment.stencilStoreOp) {
+                                        stencilStoreIndex = idx;
+                                        break;
+                                    }
+                                }
+                                if (ImGui::Combo("Stencil Store", &stencilStoreIndex, storeOpLabels, IM_ARRAYSIZE(storeOpLabels))) {
+                                    attachment.stencilStoreOp = storeOpValues[stencilStoreIndex];
+                                    attachmentSettingsChanged = true;
+                                }
+                            }
+
+                            if (attachment.isDepth) {
+                                int initialLayoutIndex = 0;
+                                for (int idx = 0; idx < IM_ARRAYSIZE(depthLayoutValues); ++idx) {
+                                    if (depthLayoutValues[idx] == attachment.initialLayout) {
+                                        initialLayoutIndex = idx;
+                                        break;
+                                    }
+                                }
+                                if (ImGui::Combo("Initial Layout", &initialLayoutIndex, depthLayoutLabels, IM_ARRAYSIZE(depthLayoutLabels))) {
+                                    attachment.initialLayout = depthLayoutValues[initialLayoutIndex];
+                                    attachmentSettingsChanged = true;
+                                }
+
+                                int finalLayoutIndex = 0;
+                                for (int idx = 0; idx < IM_ARRAYSIZE(depthLayoutValues); ++idx) {
+                                    if (depthLayoutValues[idx] == attachment.finalLayout) {
+                                        finalLayoutIndex = idx;
+                                        break;
+                                    }
+                                }
+                                if (ImGui::Combo("Final Layout", &finalLayoutIndex, depthLayoutLabels, IM_ARRAYSIZE(depthLayoutLabels))) {
+                                    attachment.finalLayout = depthLayoutValues[finalLayoutIndex];
+                                    attachmentSettingsChanged = true;
+                                }
+                            } else {
+                                int initialLayoutIndex = 0;
+                                for (int idx = 0; idx < IM_ARRAYSIZE(colorLayoutValues); ++idx) {
+                                    if (colorLayoutValues[idx] == attachment.initialLayout) {
+                                        initialLayoutIndex = idx;
+                                        break;
+                                    }
+                                }
+                                if (ImGui::Combo("Initial Layout", &initialLayoutIndex, colorLayoutLabels, IM_ARRAYSIZE(colorLayoutLabels))) {
+                                    attachment.initialLayout = colorLayoutValues[initialLayoutIndex];
+                                    attachmentSettingsChanged = true;
+                                }
+
+                                int finalLayoutIndex = 0;
+                                for (int idx = 0; idx < IM_ARRAYSIZE(colorLayoutValues); ++idx) {
+                                    if (colorLayoutValues[idx] == attachment.finalLayout) {
+                                        finalLayoutIndex = idx;
+                                        break;
+                                    }
+                                }
+                                if (ImGui::Combo("Final Layout", &finalLayoutIndex, colorLayoutLabels, IM_ARRAYSIZE(colorLayoutLabels))) {
+                                    attachment.finalLayout = colorLayoutValues[finalLayoutIndex];
+                                    attachmentSettingsChanged = true;
+                                }
+                            }
+
+                            ImGui::TreePop();
+                        }
+                        ImGui::PopID();
+                    }
+
+                    if (attachmentSettingsChanged) {
+                        pipeline.InvalidateGraphicsObjects(device);
+                    }
 
                     bool shadersReady = pipeline.vertexShader->loaded && pipeline.fragmentShader->loaded;
 
