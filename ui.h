@@ -34,7 +34,7 @@ enum class NodeType {
     ShaderGraph
 };
 
-const char* PinTypeToString(PinType type) {
+inline const char* PinTypeToString(PinType type) {
     switch(type) {
         case PinType::UniformBuffer: return "UBO";
         case PinType::StorageBuffer: return "SSBO";
@@ -50,7 +50,7 @@ const char* PinTypeToString(PinType type) {
     }
 }
 
-VkDescriptorType PinTypeToDescriptorType(PinType type) {
+inline VkDescriptorType PinTypeToDescriptorType(PinType type) {
     switch(type) {
         case PinType::UniformBuffer: return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         case PinType::StorageBuffer: return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -173,8 +173,7 @@ public:
               .arrayLayers = arrayLayers,
               .samples = VK_SAMPLE_COUNT_1_BIT,
               .tiling = VK_IMAGE_TILING_OPTIMAL,
-              .usage = VK_IMAGE_USAGE_SAMPLED_BIT,
-              //.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
+              .usage = VK_IMAGE_USAGE_SAMPLED_BIT
         });
 
         image->createImageView({.viewType = VK_IMAGE_VIEW_TYPE_2D, .format = image->getFormat(), .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1}});
@@ -203,7 +202,7 @@ public:
         vkUpdateDescriptorSets(device, 1, &writeMeow, 0, nullptr);
     }
 
-    ~ImageResourceNode() {
+    ~ImageResourceNode() override {
         vkFreeDescriptorSets(device, descriptorPool, 1, &meowTargetSet);
         resourceManager->destroySampler("ImageSampler"+std::to_string(id));
     }
@@ -390,10 +389,6 @@ public:
     }
 };
 
-// FIXME: REMOVE URGENTLY
-VkDescriptorSet debugTexture = VK_NULL_HANDLE;
-
-// NEW: Render Target Node - represents the final output
 class RenderTargetNode : public GraphNode {
 private:
     VkDevice device;
@@ -434,7 +429,7 @@ public:
         CreateRenderTarget();
     }
 
-    ~RenderTargetNode() {
+    ~RenderTargetNode() override {
         if (displaySet != VK_NULL_HANDLE) {
             //vkFreeDescriptorSets(device, descriptorPool, 1, &displaySet);
         }
@@ -680,15 +675,15 @@ public:
         if (!reflection) return;
 
         // Clear ALL pins except stage connection pins
-        inputs.erase(std::remove_if(inputs.begin(), inputs.end(),
-            [](const Pin& p) {
-                return p.type != PinType::ShaderStageIn;
-            }), inputs.end());
+        inputs.erase(std::ranges::remove_if(inputs,
+                                            [](const Pin& p) {
+                                                return p.type != PinType::ShaderStageIn;
+                                            }).begin(), inputs.end());
 
-        outputs.erase(std::remove_if(outputs.begin(), outputs.end(),
-            [](const Pin& p) {
-                return p.type != PinType::ShaderStageOut;
-            }), outputs.end());
+        outputs.erase(std::ranges::remove_if(outputs,
+                                             [](const Pin& p) {
+                                                 return p.type != PinType::ShaderStageOut;
+                                             }).begin(), outputs.end());
 
         // Reset pin ID counter to avoid ID conflicts after recompilation
         int pinId = id * 1000;
@@ -987,14 +982,9 @@ private:
     CommandPool commandPool;
     std::vector<CommandBuffer> commandBuffers;
 
-    // FIXME: Debug texture
-    Texture texture;
-    VkDescriptorSet meowTargetSet;
-    StagingBufferManager stagingBufferManager;
-
 public:
     VulkanNodeEditor(VulkanInstance& instance, Device& device)
-        : memoryAllocator(instance, device), resourceManager(device, memoryAllocator), descriptorLayoutCache(device), pipelineLayoutCache(device, descriptorLayoutCache), device(device), commandPool(device, device.getGraphicsFamily(), VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT), graphicsQueue(device.getGraphicsQueue()), stagingBufferManager(device, 64 * 1024 * 1024) {
+        : memoryAllocator(instance, device), resourceManager(device, memoryAllocator), descriptorLayoutCache(device), pipelineLayoutCache(device, descriptorLayoutCache), device(device), commandPool(device, device.getGraphicsFamily(), VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT), graphicsQueue(device.getGraphicsQueue()) {
         editorContext = ImNodes::EditorContextCreate();
         ImNodes::EditorContextSet(editorContext);
         ImNodes::StyleColorsDark();
@@ -1041,13 +1031,6 @@ public:
 
         // FIXME: WHATTT??!?!?!??!
         commandBuffers = commandPool.allocateCommandBuffers(1);
-
-        // FIXME: Temporary
-        texture = Texture::loadImage("/home/honeywrap/Documents/kitten/assets/vokselia_spawn/vokselia_spawn.png");
-        texture.pushTexture(resourceManager, stagingBufferManager);
-
-        meowTargetSet = ImGui_ImplVulkan_AddTexture(texture.sampler->getSampler(), texture.image->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-        debugTexture = meowTargetSet;
 
         renderPass = std::make_unique<RenderPass>(device);
         VkAttachmentDescription colorAttachment{};
@@ -1136,7 +1119,6 @@ public:
         return nullptr;
     }
 
-    // NEW: Analyze graph and detect valid pipelines
     void AnalyzePipelines() {
         std::cout << "Analyzing!!" << std::endl;
         detectedPipelines.clear();
@@ -1268,17 +1250,9 @@ public:
         .setColorBlendState({alphaBlend})
         .setDepthStencilState(VK_FALSE, VK_FALSE, VK_COMPARE_OP_LESS)
         .setLayout(pipelineLayout)
-        .setRenderPass(*renderPass.get(), 0)
+        .setRenderPass(*renderPass, 0)
         .setDynamicState({VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR})
         .build(device);
-
-        // 1. Creating VkShaderModules from spirvCode
-        // 2. Setting up descriptor set layouts from collected bindings
-        // 3. Creating pipeline layout
-        // 4. Setting up vertex input state
-        // 5. Creating render pass for the render target
-        // 6. Creating graphics pipeline
-        // 7. Allocating and updating descriptor sets
 
         return true;
     }
@@ -1288,15 +1262,14 @@ public:
     }
 
     void EditShaderNode(int nodeId) {
-        if (!nodes.count(nodeId)) return;
+        if (!nodes.contains(nodeId)) return;
 
         auto* shaderNode = dynamic_cast<ShaderGraphNode*>(nodes[nodeId].get());
         if (!shaderNode) return;
 
         if (textEditor) {
-            if (editingNodeId >= 0 && nodes.count(editingNodeId)) {
-                auto* prevNode = dynamic_cast<ShaderGraphNode*>(nodes[editingNodeId].get());
-                if (prevNode) {
+            if (editingNodeId >= 0 && nodes.contains(editingNodeId)) {
+                if (auto* prevNode = dynamic_cast<ShaderGraphNode*>(nodes[editingNodeId].get())) {
                     prevNode->sourceCode = textEditor->GetText();
                 }
             }
@@ -1309,9 +1282,8 @@ public:
     }
 
     void SaveCurrentShaderEdit() {
-        if (editingNodeId >= 0 && nodes.count(editingNodeId) && textEditor) {
-            auto* shaderNode = dynamic_cast<ShaderGraphNode*>(nodes[editingNodeId].get());
-            if (shaderNode) {
+        if (editingNodeId >= 0 && nodes.contains(editingNodeId) && textEditor) {
+            if (auto* shaderNode = dynamic_cast<ShaderGraphNode*>(nodes[editingNodeId].get())) {
                 shaderNode->sourceCode = textEditor->GetText();
             }
         }
@@ -1423,7 +1395,7 @@ public:
             }
 
             if (canConnect) {
-                Link newLink;
+                Link newLink{};
                 newLink.id = nextLinkId++;
                 newLink.startPinId = startPin;
                 newLink.endPinId = endPin;
@@ -1433,8 +1405,8 @@ public:
 
         int linkId;
         if (ImNodes::IsLinkDestroyed(&linkId)) {
-            links.erase(std::remove_if(links.begin(), links.end(),
-                [linkId](const Link& link) { return link.id == linkId; }),
+            links.erase(std::ranges::remove_if(links,
+                                               [linkId](const Link& link) { return link.id == linkId; }).begin(),
                 links.end());
         }
 
@@ -1450,9 +1422,8 @@ public:
         // Detect double-click on shader nodes
         int clickedNodeId = -1;
         if (ImNodes::IsNodeHovered(&clickedNodeId) && ImGui::IsMouseDoubleClicked(0)) {
-            if (nodes.count(clickedNodeId)) {
-                auto* shaderNode = dynamic_cast<ShaderGraphNode*>(nodes[clickedNodeId].get());
-                if (shaderNode) {
+            if (nodes.contains(clickedNodeId)) {
+                if (auto* shaderNode = dynamic_cast<ShaderGraphNode*>(nodes[clickedNodeId].get())) {
                     EditShaderNode(clickedNodeId);
                 }
             }
@@ -1471,25 +1442,25 @@ public:
                     }
                 }
 
-                links.erase(std::remove_if(links.begin(), links.end(),
-                    [this, nodeId](const Link& link) {
-                        Pin* start = FindPin(link.startPinId);
-                        Pin* end = FindPin(link.endPinId);
-                        auto startNode = std::find_if(nodes.begin(), nodes.end(),
-                            [start](const auto& pair) {
-                                for (auto& p : pair.second->outputs)
-                                    if (&p == start) return true;
-                                return false;
-                            });
-                        auto endNode = std::find_if(nodes.begin(), nodes.end(),
-                            [end](const auto& pair) {
-                                for (auto& p : pair.second->inputs)
-                                    if (&p == end) return true;
-                                return false;
-                            });
-                        return (startNode != nodes.end() && startNode->first == nodeId) ||
-                               (endNode != nodes.end() && endNode->first == nodeId);
-                    }), links.end());
+                links.erase(std::ranges::remove_if(links,
+                                                   [this, nodeId](const Link& link) {
+                                                       Pin* start = FindPin(link.startPinId);
+                                                       Pin* end = FindPin(link.endPinId);
+                                                       auto startNode = std::ranges::find_if(nodes,
+                                                           [start](const auto& pair) {
+                                                               for (auto& p : pair.second->outputs)
+                                                                   if (&p == start) return true;
+                                                               return false;
+                                                           });
+                                                       auto endNode = std::ranges::find_if(nodes,
+                                                           [end](const auto& pair) {
+                                                               for (auto& p : pair.second->inputs)
+                                                                   if (&p == end) return true;
+                                                               return false;
+                                                           });
+                                                       return (startNode != nodes.end() && startNode->first == nodeId) ||
+                                                              (endNode != nodes.end() && endNode->first == nodeId);
+                                                   }).begin(), links.end());
 
                 nodes.erase(nodeId);
             }
@@ -1502,7 +1473,7 @@ public:
 
         // Properties panel
         ImGui::Begin("Node Properties");
-        if (selectedNodeId >= 0 && nodes.count(selectedNodeId)) {
+        if (selectedNodeId >= 0 && nodes.contains(selectedNodeId)) {
             nodes[selectedNodeId]->DrawProperties();
         } else {
             ImGui::TextDisabled("No node selected");
