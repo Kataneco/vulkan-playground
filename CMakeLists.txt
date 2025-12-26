@@ -111,6 +111,8 @@ add_executable(kitten main.cpp
         src/alphyslab/ShaderNode.h
         src/alphyslab/FramebufferNode.cpp
         src/alphyslab/FramebufferNode.h
+        src/alphyslab/PipelineNode.cpp
+        src/alphyslab/PipelineNode.h
 )
 
 target_link_libraries(kitten glfw X11 shaderc_shared)

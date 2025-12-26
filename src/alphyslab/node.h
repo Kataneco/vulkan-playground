@@ -24,7 +24,8 @@ enum class PinType {
     VertexInput,
     FragmentOutput,
     ShaderStageIn,
-    ShaderStageOut
+    ShaderStageOut,
+    Pipeline
 };
 
 enum class NodeType {

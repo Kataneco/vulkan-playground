@@ -305,7 +305,11 @@ int main(int argc, char* argv[]) {
 
         ImGui::Begin("Viewport");
         ImVec2 viewportSize = ImGui::GetContentRegionAvail();
-        ImGui::Image(meowTargetSet, viewportSize, ImVec2(0,0), ImVec2(viewportSize.x/2048, viewportSize.y/2048));
+        if (nodeEditor.getFocusedImage() == VK_NULL_HANDLE) {
+            ImGui::Image(meowTargetSet, viewportSize, ImVec2(0,0), ImVec2(viewportSize.x/2048, viewportSize.y/2048));
+        } else {
+            ImGui::Image(nodeEditor.getFocusedImage(), viewportSize, ImVec2(0,0), ImVec2(viewportSize.x/2048, viewportSize.y/2048));
+        }
         //ImGui::Text("size = %d x %d", static_cast<int>(viewportSize.x), static_cast<int>(viewportSize.y));
         ImGui::End();
 
