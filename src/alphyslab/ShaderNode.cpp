@@ -204,19 +204,8 @@ void ShaderNode::PopulateFromReflection() {
         }
     }
 
-    // Add fragment outputs
-    if (stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
-        for (const auto& outputVar : reflection->getOutputVariables()) {
-            Pin output;
-            output.id = pinId++;
-            output.name = outputVar.name;
-            output.isInput = false;
-            output.type = PinType::FragmentOutput;
-            output.location = outputVar.location;
-            output.format = outputVar.format;
-            outputs.push_back(output);
-        }
-    }
+    // NOTE: Fragment outputs are no longer exposed as pins
+    // Shaders now connect to pipelines, not directly to render targets
 }
 
 void ShaderNode::Draw() {

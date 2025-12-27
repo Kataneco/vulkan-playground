@@ -3,25 +3,7 @@
 #include <alphyslab/ResourceNode.h>
 #include <alphyslab/ShaderNode.h>
 #include <alphyslab/FramebufferNode.h>
-
-struct PipelineBuilder {
-    ShaderNode* vertexShader = nullptr;
-    ShaderNode* fragmentShader = nullptr;
-    std::vector<ShaderNode*> shaderChain;
-    FramebufferNode* renderTarget = nullptr;
-
-    // Collected resources from all connected nodes
-    std::unordered_map<int, std::pair<uint32_t, uint32_t>> descriptorBindings; // pinId -> (set, binding)
-    std::vector<VkVertexInputAttributeDescription> vertexAttributes;
-    std::vector<VkFormat> colorAttachmentFormats;
-
-    VkPipeline pipeline = VK_NULL_HANDLE;
-
-    VkViewport viewport{};
-    VkRect2D scissor{};
-
-    bool IsValid() const;
-};
+#include <alphyslab/PipelineNode.h>
 
 // Main node editor
 class VulkanNodeEditor {
@@ -41,9 +23,6 @@ private:
 
     TextEditor* textEditor = nullptr;
     int editingNodeId = -1;
-
-    // Pipeline building state
-    std::vector<PipelineBuilder> detectedPipelines;
 
     DescriptorLayoutCache descriptorLayoutCache;
     PipelineLayoutCache pipelineLayoutCache;
@@ -65,6 +44,7 @@ public:
     void AddBufferNode(bool uniform = true);
     void AddShaderNode(VkShaderStageFlagBits stage = VK_SHADER_STAGE_FRAGMENT_BIT);
     void AddRenderTargetNode();
+    void AddPipelineNode();
 
     const std::unordered_map<int, std::unique_ptr<GraphNode>>& GetNodes() const { return nodes; }
     const std::vector<Link>& GetLinks() const { return links; }
@@ -73,13 +53,14 @@ public:
     const Link* FindLinkToPin(int pinId) const;
     GraphNode* FindNodeByPin(int pinId) const;
 
-    void AnalyzePipelines();
-    bool BuildPipeline(PipelineBuilder& builder);
-
     void SetTextEditor(TextEditor* editor);
     void EditShaderNode(int nodeId);
     void SaveCurrentShaderEdit();
 
     void Draw(CommandBuffer& commandBuffer);
     VkDescriptorSet getFocusedImage();
+
+private:
+    void UpdatePipelineConnections(PipelineNode* pipeline);
+    FramebufferNode* GetConnectedRenderTarget(PipelineNode* pipeline);
 };

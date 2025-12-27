@@ -1,9 +1,5 @@
 #include "ui.h"
 
-bool PipelineBuilder::IsValid() const {
-    return vertexShader && fragmentShader && renderTarget;
-}
-
 VulkanNodeEditor::VulkanNodeEditor(VulkanInstance& instance, Device& device)
     : memoryAllocator(instance, device),
       resourceManager(device, memoryAllocator),
@@ -57,7 +53,6 @@ VulkanNodeEditor::VulkanNodeEditor(VulkanInstance& instance, Device& device)
 
     vkCreateDescriptorPool(device, &pool_info, nullptr, &descriptorPool);
 
-    // FIXME: WHATTT??!?!?!??!
     commandBuffers = commandPool.allocateCommandBuffers(1);
 
     renderPass = std::make_unique<RenderPass>(device);
@@ -113,6 +108,11 @@ void VulkanNodeEditor::AddRenderTargetNode() {
     nodes[node->id] = std::move(node);
 }
 
+void VulkanNodeEditor::AddPipelineNode() {
+    auto node = std::make_unique<PipelineNode>(nextNodeId++, device, &descriptorLayoutCache, &pipelineLayoutCache, renderPass.get());
+    nodes[node->id] = std::move(node);
+}
+
 Pin* VulkanNodeEditor::FindPin(int pinId) const {
     for (auto& [nodeId, node] : nodes) {
         for (auto& pin : node->inputs) {
@@ -144,140 +144,63 @@ GraphNode* VulkanNodeEditor::FindNodeByPin(int pinId) const {
     return nullptr;
 }
 
-void VulkanNodeEditor::AnalyzePipelines() {
-    std::cout << "Analyzing!!" << std::endl;
-    detectedPipelines.clear();
+void VulkanNodeEditor::UpdatePipelineConnections(PipelineNode* pipeline) {
+    if (!pipeline) return;
 
-    // Find all render target nodes
-    std::vector<FramebufferNode*> renderTargets;
-    for (auto& [id, node] : nodes) {
-        if (node->nodeType == NodeType::RenderTarget) {
-            std::cout << "Render target found " << node->name << std::endl;
-            renderTargets.push_back(dynamic_cast<FramebufferNode*>(node.get()));
+    // Clear existing connections
+    pipeline->vertexShader.node = nullptr;
+    pipeline->fragmentShader.node = nullptr;
+    pipeline->geometryShader.node = nullptr;
+
+    // Find connected shader nodes
+    for (const auto& link : links) {
+        Pin* endPin = FindPin(link.endPinId);
+        if (!endPin) continue;
+
+        GraphNode* endNode = FindNodeByPin(link.endPinId);
+        if (!endNode || endNode->id != pipeline->id) continue;
+
+        GraphNode* startNode = FindNodeByPin(link.startPinId);
+        if (!startNode || startNode->nodeType != NodeType::ShaderGraph) continue;
+
+        auto* shader = dynamic_cast<ShaderNode*>(startNode);
+        if (!shader) continue;
+
+        if (link.endPinId == pipeline->vertexShaderInputPin) {
+            pipeline->vertexShader.node = shader;
+            pipeline->vertexShader.pinId = link.endPinId;
+        } else if (link.endPinId == pipeline->fragmentShaderInputPin) {
+            pipeline->fragmentShader.node = shader;
+            pipeline->fragmentShader.pinId = link.endPinId;
+        } else if (link.endPinId == pipeline->geometryShaderInputPin) {
+            pipeline->geometryShader.node = shader;
+            pipeline->geometryShader.pinId = link.endPinId;
         }
     }
 
-    // For each render target, trace back to find the pipeline
-    for (auto* rt : renderTargets) {
-        PipelineBuilder builder;
-        builder.renderTarget = rt;
+    // Update descriptor pins based on connected shaders
+    std::vector<ShaderNode*> connectedShaders;
+    if (pipeline->vertexShader.node) connectedShaders.push_back(pipeline->vertexShader.node);
+    if (pipeline->fragmentShader.node) connectedShaders.push_back(pipeline->fragmentShader.node);
+    if (pipeline->geometryShader.node) connectedShaders.push_back(pipeline->geometryShader.node);
 
-        // Find fragment shader connected to render target
-        for (const auto& link : links) {
-            Pin* startPin = FindPin(link.startPinId);
-            Pin* endPin = FindPin(link.endPinId);
-            if (!startPin || !endPin) continue;
-            if (endPin->type == PinType::FragmentOutput) {
-                GraphNode* node = FindNodeByPin(link.endPinId);
-                if (node && node->id == rt->id) {
-                    GraphNode* faggot = FindNodeByPin(link.startPinId);
-                    if (faggot->nodeType == NodeType::ShaderGraph) {
-                        auto* fragShader = dynamic_cast<ShaderNode*>(faggot);
-                        if (fragShader->stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
-                            std::cout << "Fragment shader found" << std::endl;
-                            builder.fragmentShader = fragShader;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-
-        if (!builder.fragmentShader) {
-            std::cout << "Fragment shader not found" << std::endl;
-            continue;
-        }
-
-        // Find vertex shader connected to fragment shader
-        if (builder.fragmentShader->stageInputPinId >= 0) {
-            for (const auto& link : links) {
-                if (link.endPinId == builder.fragmentShader->stageInputPinId) {
-                    Pin* startPin = FindPin(link.startPinId);
-                    if (startPin && startPin->type == PinType::ShaderStageOut) {
-                        GraphNode* node = FindNodeByPin(link.startPinId);
-                        if (node->nodeType == NodeType::ShaderGraph) {
-                            auto* vertShader = dynamic_cast<ShaderNode*>(node);
-                            if (vertShader->stage == VK_SHADER_STAGE_VERTEX_BIT) {
-                                builder.vertexShader = vertShader;
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if (builder.IsValid()) {
-            // Collect all resources connected to shaders
-            std::vector<ShaderNode*> shaders = {builder.vertexShader, builder.fragmentShader};
-            for (auto* shader : shaders) {
-                for (const auto& input : shader->inputs) {
-                    if (input.type != PinType::ShaderStageIn &&
-                        input.type != PinType::PushConstant &&
-                        input.type != PinType::VertexInput) {
-                        // Find what's connected to this input
-                        for (const auto& link : links) {
-                            if (link.endPinId == input.id) {
-                                builder.descriptorBindings[input.id] = {input.set, input.binding};
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-
-            detectedPipelines.push_back(builder);
-        } else {
-            std::cout << "Invalid pipeline!!" << std::endl;
-        }
-    }
+    pipeline->UpdateDescriptorPins(connectedShaders);
 }
 
-bool VulkanNodeEditor::BuildPipeline(PipelineBuilder& builder) {
-    if (!builder.IsValid()) {
-        std::cerr << "Invalid pipeline builder" << std::endl;
-        return false;
+FramebufferNode* VulkanNodeEditor::GetConnectedRenderTarget(PipelineNode* pipeline) {
+    if (!pipeline) return nullptr;
+
+    // Find render target connected to pipeline's output
+    for (const auto& link : links) {
+        if (link.startPinId != pipeline->renderTargetOutputPin) continue;
+
+        GraphNode* targetNode = FindNodeByPin(link.endPinId);
+        if (!targetNode || targetNode->nodeType != NodeType::RenderTarget) continue;
+
+        return dynamic_cast<FramebufferNode*>(targetNode);
     }
 
-    if (!builder.vertexShader->loaded || !builder.fragmentShader->loaded) {
-        std::cerr << "Shaders not compiled" << std::endl;
-        return false;
-    }
-
-    std::cout << "Building pipeline:" << std::endl;
-    std::cout << "  Vertex Shader: " << builder.vertexShader->name << std::endl;
-    std::cout << "  Fragment Shader: " << builder.fragmentShader->name << std::endl;
-    std::cout << "  Render Target: " << builder.renderTarget->extent.width << "x"
-              << builder.renderTarget->extent.height << std::endl;
-    std::cout << "  Descriptor Bindings: " << builder.descriptorBindings.size() << std::endl;
-
-    auto vertCode = builder.vertexShader->spirvCode;
-    auto fragCode = builder.fragmentShader->spirvCode;
-    ShaderModule vertModule(device, vertCode), fragModule(device, fragCode);
-    ShaderReflection vertexShader(vertCode), fragmentShader(fragCode);
-    VkPipelineLayout pipelineLayout = pipelineLayoutCache.createPipelineLayout(vertexShader+fragmentShader);
-
-    builder.viewport.width = static_cast<float>(builder.renderTarget->extent.width);
-    builder.viewport.height = static_cast<float>(builder.renderTarget->extent.height);
-    builder.viewport.minDepth = 0.0f;
-    builder.viewport.maxDepth = 1.0f;
-
-    builder.scissor.extent = {static_cast<uint32_t>(builder.renderTarget->extent.width), static_cast<uint32_t>(builder.renderTarget->extent.height)};
-
-    // TODO: Ability to run arbitrary vector buffers through pipelines
-    // TODO: Figure out how to customize render passes!!
-    builder.pipeline = GraphicsPipelineBuilder()
-    .setShaders(vertModule, fragModule)
-    .setViewportState(builder.viewport, builder.scissor)
-    .setRasterizationState(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE, 1.0f)
-    .setColorBlendState({alphaBlend})
-    .setDepthStencilState(VK_FALSE, VK_FALSE, VK_COMPARE_OP_LESS)
-    .setLayout(pipelineLayout)
-    .setRenderPass(*renderPass, 0)
-    .setDynamicState({VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR})
-    .build(device);
-
-    return true;
+    return nullptr;
 }
 
 void VulkanNodeEditor::SetTextEditor(TextEditor* editor) {
@@ -313,6 +236,7 @@ void VulkanNodeEditor::SaveCurrentShaderEdit() {
 }
 
 void VulkanNodeEditor::Draw(CommandBuffer& commandBuffer) {
+    // Prepare render targets
     std::vector<FramebufferNode*> renderTargets;
     for (auto& [id, node] : nodes) {
         if (node->nodeType == NodeType::RenderTarget) {
@@ -321,31 +245,56 @@ void VulkanNodeEditor::Draw(CommandBuffer& commandBuffer) {
     }
 
     for (auto renderTarget: renderTargets) {
-        ResourceBarrier::transitionImageLayout(commandBuffer, renderTarget->targetImage->getImage(), renderTarget->format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        ResourceBarrier::transitionImageLayout(commandBuffer, renderTarget->targetImage->getImage(),
+            renderTarget->format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     }
 
-    for (auto& pipeline: detectedPipelines) {
-        if (pipeline.pipeline != VK_NULL_HANDLE) {
-            ResourceBarrier::transitionImageLayout(commandBuffer, pipeline.renderTarget->targetImage->getImage(), pipeline.renderTarget->format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    // Execute pipelines
+    for (auto& [id, node] : nodes) {
+        if (node->nodeType != NodeType::Pipeline) continue;
 
-            renderPass->begin(commandBuffer, *pipeline.renderTarget->framebuffer, {.extent = {static_cast<uint32_t>(pipeline.renderTarget->extent.width), static_cast<uint32_t>(pipeline.renderTarget->extent.height)}}, {{.color = {0.0f, 0.5f, 1.0f, 1.0f}}, {.depthStencil = {1.0f, 0}}});
+        auto* pipeline = dynamic_cast<PipelineNode*>(node.get());
+        if (!pipeline || !pipeline->isBuilt) continue;
 
-            vkCmdSetViewport(commandBuffer, 0, 1, &pipeline.viewport);
-            vkCmdSetScissor(commandBuffer, 0, 1, &pipeline.scissor);
+        auto* renderTarget = GetConnectedRenderTarget(pipeline);
+        if (!renderTarget) continue;
 
-            commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.pipeline);
-            commandBuffer.draw(3);
+        // Update viewport/scissor from render target
+        pipeline->viewport.width = static_cast<float>(renderTarget->extent.width);
+        pipeline->viewport.height = static_cast<float>(renderTarget->extent.height);
+        pipeline->viewport.minDepth = 0.0f;
+        pipeline->viewport.maxDepth = 1.0f;
+        pipeline->scissor.extent = {
+            static_cast<uint32_t>(renderTarget->extent.width),
+            static_cast<uint32_t>(renderTarget->extent.height)
+        };
 
-            renderPass->end(commandBuffer);
+        ResourceBarrier::transitionImageLayout(commandBuffer, renderTarget->targetImage->getImage(),
+            renderTarget->format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
-            ResourceBarrier::transitionImageLayout(commandBuffer, pipeline.renderTarget->targetImage->getImage(), pipeline.renderTarget->format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-        }
+        renderPass->begin(commandBuffer, *renderTarget->framebuffer,
+            {.extent = {static_cast<uint32_t>(renderTarget->extent.width),
+                       static_cast<uint32_t>(renderTarget->extent.height)}},
+            {{.color = {0.0f, 0.5f, 1.0f, 1.0f}}, {.depthStencil = {1.0f, 0}}});
+
+        vkCmdSetViewport(commandBuffer, 0, 1, &pipeline->viewport);
+        vkCmdSetScissor(commandBuffer, 0, 1, &pipeline->scissor);
+
+        commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline);
+        commandBuffer.draw(3);
+
+        renderPass->end(commandBuffer);
+
+        ResourceBarrier::transitionImageLayout(commandBuffer, renderTarget->targetImage->getImage(),
+            renderTarget->format, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     }
 
     ImGui::Begin("Shader Graph Editor", nullptr, ImGuiWindowFlags_MenuBar);
 
     if (ImGui::BeginMenuBar()) {
         if (ImGui::BeginMenu("Add")) {
+            if (ImGui::MenuItem("⚙ Pipeline")) AddPipelineNode();
+            ImGui::Separator();
             if (ImGui::MenuItem("RT Render Target")) AddRenderTargetNode();
             ImGui::Separator();
             if (ImGui::MenuItem("V Vertex Shader")) AddShaderNode(VK_SHADER_STAGE_VERTEX_BIT);
@@ -356,20 +305,6 @@ void VulkanNodeEditor::Draw(CommandBuffer& commandBuffer) {
             if (ImGui::MenuItem("I Image Resource")) AddImageNode();
             if (ImGui::MenuItem("UB Uniform Buffer")) AddBufferNode(true);
             if (ImGui::MenuItem("SB Storage Buffer")) AddBufferNode(false);
-            ImGui::EndMenu();
-        }
-
-        if (ImGui::BeginMenu("Pipeline")) {
-            if (ImGui::MenuItem("OwO Analyze Graph")) {
-                AnalyzePipelines();
-            }
-            ImGui::Separator();
-            ImGui::TextDisabled("Detected Pipelines: %zu", detectedPipelines.size());
-            for (size_t i = 0; i < detectedPipelines.size(); i++) {
-                if (ImGui::MenuItem(("Build Pipeline " + std::to_string(i)).c_str())) {
-                    BuildPipeline(detectedPipelines[i]);
-                }
-            }
             ImGui::EndMenu();
         }
 
@@ -398,15 +333,15 @@ void VulkanNodeEditor::Draw(CommandBuffer& commandBuffer) {
         bool canConnect = false;
 
         if (start && end && !start->isInput && end->isInput) {
-            // Allow stage connections
+            // Allow shader to pipeline connections
             if (start->type == PinType::ShaderStageOut && end->type == PinType::ShaderStageIn) {
                 canConnect = true;
             }
-            // Allow fragment output to render target
-            else if (start->type == PinType::FragmentOutput && end->type == PinType::FragmentOutput) {
+            // Allow pipeline to render target
+            else if (start->type == PinType::RenderTarget && end->type == PinType::FragmentOutput) {
                 canConnect = true;
             }
-            // Allow resource connections
+            // Allow resource connections (resources to shaders or pipelines)
             else if (start->type == end->type) {
                 canConnect = true;
             }
@@ -418,14 +353,35 @@ void VulkanNodeEditor::Draw(CommandBuffer& commandBuffer) {
             newLink.startPinId = startPin;
             newLink.endPinId = endPin;
             links.push_back(newLink);
+
+            // Update pipeline connections if we connected to a pipeline
+            GraphNode* endNode = FindNodeByPin(endPin);
+            if (endNode && endNode->nodeType == NodeType::Pipeline) {
+                UpdatePipelineConnections(dynamic_cast<PipelineNode*>(endNode));
+            }
         }
     }
 
     int linkId;
     if (ImNodes::IsLinkDestroyed(&linkId)) {
-        links.erase(std::ranges::remove_if(links,
-                                           [linkId](const Link& link) { return link.id == linkId; }).begin(),
-            links.end());
+        // Find the link being destroyed
+        auto linkIt = std::ranges::find_if(links, [linkId](const Link& link) {
+            return link.id == linkId;
+        });
+
+        if (linkIt != links.end()) {
+            // Check if this link was connected to a pipeline
+            GraphNode* endNode = FindNodeByPin(linkIt->endPinId);
+            if (endNode && endNode->nodeType == NodeType::Pipeline) {
+                auto* pipeline = dynamic_cast<PipelineNode*>(endNode);
+                // Remove the link first
+                links.erase(linkIt);
+                // Then update pipeline connections
+                UpdatePipelineConnections(pipeline);
+            } else {
+                links.erase(linkIt);
+            }
+        }
     }
 
     const int numSelected = ImNodes::NumSelectedNodes();
@@ -437,7 +393,7 @@ void VulkanNodeEditor::Draw(CommandBuffer& commandBuffer) {
         selectedNodeId = -1;
     }
 
-    // Detect click on shader nodes
+    // Detect click on nodes
     int clickedNodeId = -1;
     if (ImNodes::IsNodeHovered(&clickedNodeId) && ImGui::IsMouseClicked(0)) {
         if (nodes.contains(clickedNodeId)) {
@@ -462,31 +418,33 @@ void VulkanNodeEditor::Draw(CommandBuffer& commandBuffer) {
                 }
             }
 
-            if (auto* framebufferNode = dynamic_cast<FramebufferNode*>(nodes[clickedNodeId].get())) {
-                if (focused_image == framebufferNode->displaySet) {
-                    focused_image = VK_NULL_HANDLE;
+            if (nodes.contains(nodeId)) {
+                if (auto* framebufferNode = dynamic_cast<FramebufferNode*>(nodes[nodeId].get())) {
+                    if (focused_image == framebufferNode->displaySet) {
+                        focused_image = VK_NULL_HANDLE;
+                    }
                 }
             }
 
             links.erase(std::ranges::remove_if(links,
-                                               [this, nodeId](const Link& link) {
-                                                   Pin* start = FindPin(link.startPinId);
-                                                   Pin* end = FindPin(link.endPinId);
-                                                   auto startNode = std::ranges::find_if(nodes,
-                                                       [start](const auto& pair) {
-                                                           for (auto& p : pair.second->outputs)
-                                                               if (&p == start) return true;
-                                                           return false;
-                                                       });
-                                                   auto endNode = std::ranges::find_if(nodes,
-                                                       [end](const auto& pair) {
-                                                           for (auto& p : pair.second->inputs)
-                                                               if (&p == end) return true;
-                                                           return false;
-                                                       });
-                                                   return (startNode != nodes.end() && startNode->first == nodeId) ||
-                                                          (endNode != nodes.end() && endNode->first == nodeId);
-                                               }).begin(), links.end());
+                [this, nodeId](const Link& link) {
+                    Pin* start = FindPin(link.startPinId);
+                    Pin* end = FindPin(link.endPinId);
+                    auto startNode = std::ranges::find_if(nodes,
+                        [start](const auto& pair) {
+                            for (auto& p : pair.second->outputs)
+                                if (&p == start) return true;
+                            return false;
+                        });
+                    auto endNode = std::ranges::find_if(nodes,
+                        [end](const auto& pair) {
+                            for (auto& p : pair.second->inputs)
+                                if (&p == end) return true;
+                            return false;
+                        });
+                    return (startNode != nodes.end() && startNode->first == nodeId) ||
+                           (endNode != nodes.end() && endNode->first == nodeId);
+                }).begin(), links.end());
 
             nodes.erase(nodeId);
         }
@@ -504,56 +462,6 @@ void VulkanNodeEditor::Draw(CommandBuffer& commandBuffer) {
     } else {
         ImGui::TextDisabled("No node selected");
         ImGui::Separator();
-    }
-    ImGui::End();
-
-    // Pipeline info panel
-    ImGui::Begin("Pipeline Info");
-    if (detectedPipelines.empty()) {
-        ImGui::TextDisabled("No pipelines detected");
-        ImGui::Separator();
-        ImGui::TextWrapped("Build a complete pipeline:");
-        ImGui::BulletText("Add a Vertex Shader");
-        ImGui::BulletText("Add a Fragment Shader");
-        ImGui::BulletText("Add a Render Target");
-        ImGui::BulletText("Connect: Vertex → Fragment → Render Target");
-        ImGui::BulletText("Use 'Pipeline → Analyze Graph'");
-    } else {
-        ImGui::Text("O_O Detected %zu pipeline(s)", detectedPipelines.size());
-        ImGui::Separator();
-
-        for (size_t i = 0; i < detectedPipelines.size(); i++) {
-            auto& pipeline = detectedPipelines[i];
-            if (ImGui::CollapsingHeader(("Pipeline " + std::to_string(i)).c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
-                ImGui::Indent();
-                ImGui::TextColored(ImVec4(0.5f, 1.0f, 0.5f, 1.0f), "+ Complete Pipeline");
-                ImGui::BulletText("Vertex: %s", pipeline.vertexShader->name.c_str());
-                ImGui::BulletText("Fragment: %s", pipeline.fragmentShader->name.c_str());
-                ImGui::BulletText("Target: %dx%d",
-                    pipeline.renderTarget->extent.width,
-                    pipeline.renderTarget->extent.height);
-                ImGui::BulletText("Resources: %zu", pipeline.descriptorBindings.size());
-
-                bool shadersReady = pipeline.vertexShader->loaded && pipeline.fragmentShader->loaded;
-
-                if (!shadersReady) {
-                    ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.0f, 1.0f), "- Compile shaders first!");
-                }
-
-                ImGui::Spacing();
-                if (ImGui::Button(("UwU Build Pipeline " + std::to_string(i)).c_str(), ImVec2(-1, 0))) {
-                    if (shadersReady) {
-                        BuildPipeline(pipeline);
-                    }
-                }
-
-                if (!shadersReady) {
-                    ImGui::SetItemTooltip("Compile all shaders before building the pipeline");
-                }
-
-                ImGui::Unindent();
-            }
-        }
     }
     ImGui::End();
 }

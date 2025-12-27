@@ -25,7 +25,8 @@ enum class PinType {
     FragmentOutput,
     ShaderStageIn,
     ShaderStageOut,
-    Pipeline
+    Pipeline,
+    RenderTarget
 };
 
 enum class NodeType {
@@ -33,7 +34,8 @@ enum class NodeType {
     ImageResource,
     BufferResource,
     RenderTarget,
-    ShaderGraph
+    ShaderGraph,
+    Pipeline
 };
 
 inline const char* PinTypeToString(PinType type) {
