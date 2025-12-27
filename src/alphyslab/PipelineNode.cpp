@@ -201,6 +201,24 @@ void PipelineNode::DestroyPipeline() {
     isBuilt = false;
 }
 
+void PipelineNode::UpdatePipelineState() {
+    // This method is called when pipeline state properties are changed
+    // and the pipeline needs to be rebuilt with the new state
+
+    if (!isBuilt) {
+        // Pipeline hasn't been built yet, nothing to update
+        return;
+    }
+
+    // Mark as needing rebuild
+    isBuilt = false;
+
+    // Optionally, auto-rebuild if shaders are ready
+    if (HasValidShaders()) {
+        BuildPipeline();
+    }
+}
+
 void PipelineNode::Draw() {
     ImNodes::BeginNode(id);
 
@@ -292,7 +310,7 @@ void PipelineNode::DrawProperties() {
 
         if (ImGui::Combo("Polygon Mode", &currentMode, polygonModes, 3)) {
             polygonMode = polygonModeValues[currentMode];
-            if (isBuilt) isBuilt = false; // Mark for rebuild
+            UpdatePipelineState();
         }
 
         const char* cullModes[] = {"None", "Front", "Back", "Front & Back"};
@@ -313,21 +331,21 @@ void PipelineNode::DrawProperties() {
 
         if (ImGui::Combo("Cull Mode", &currentCull, cullModes, 4)) {
             cullMode = cullModeValues[currentCull];
-            if (isBuilt) isBuilt = false;
+            UpdatePipelineState();
         }
 
         if (ImGui::SliderFloat("Line Width", &lineWidth, 1.0f, 10.0f)) {
-            if (isBuilt) isBuilt = false;
+            UpdatePipelineState();
         }
     }
 
     // Depth state
     if (ImGui::CollapsingHeader("Depth/Stencil")) {
         if (ImGui::Checkbox("Depth Test", &depthTestEnable)) {
-            if (isBuilt) isBuilt = false;
+            UpdatePipelineState();
         }
         if (ImGui::Checkbox("Depth Write", &depthWriteEnable)) {
-            if (isBuilt) isBuilt = false;
+            UpdatePipelineState();
         }
     }
 

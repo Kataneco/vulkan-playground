@@ -1,32 +1,36 @@
 #pragma once
-#include "node.h"
-
+#include <alphyslab/node.h>
+#include <shader/ShaderReflection.h>
+#include <shader/ShaderCompiler.h>
 
 class ShaderNode : public GraphNode {
 public:
+    VkShaderStageFlagBits stage;
     std::string shaderPath;
     std::string sourceCode;
-    VkShaderStageFlagBits stage;
     std::vector<uint32_t> spirvCode;
+
     std::unique_ptr<ShaderReflection> reflection;
+
     bool loaded = false;
     std::string compileError;
 
-    int stageOutputPinId = -1;
-    int stageInputPinId = -1;
+    // Pin IDs for stage connections
+    int stageOutputPinId = -1;  // Output to pipeline node
+    // Note: stageInputPinId removed - shaders no longer chain together
 
+public:
     ShaderNode(int nodeId, VkShaderStageFlagBits shaderStage);
-
-    const char* GetTypeName() const override { return "Shader"; }
-
-    void UpdateName();
-
-    bool LoadSourceCode(const std::string& path);
-    bool LoadShader(const std::string& path);
-
-    bool CompileShader();
-    void PopulateFromReflection();
 
     void Draw() override;
     void DrawProperties() override;
+
+    const char* GetTypeName() const override { return "Shader"; }
+
+    bool LoadSourceCode(const std::string& path);
+    bool LoadShader(const std::string& path);
+    bool CompileShader();
+
+    void PopulateFromReflection();
+    void UpdateName();
 };

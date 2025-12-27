@@ -7,31 +7,28 @@ ShaderNode::ShaderNode(int nodeId, VkShaderStageFlagBits shaderStage)
     // Create stage connection pins
     int basePinId = nodeId * 1000 + 10000; // Offset to avoid conflicts
 
-    // Output pin for connecting to next stage
-    if (stage == VK_SHADER_STAGE_VERTEX_BIT || stage == VK_SHADER_STAGE_GEOMETRY_BIT) {
-        stageOutputPinId = basePinId++;
-        Pin stageOut;
-        stageOut.id = stageOutputPinId;
-        stageOut.name = "Next Stage";
-        stageOut.isInput = false;
-        stageOut.type = PinType::ShaderStageOut;
-        stageOut.stages = stage;
-        outputs.push_back(stageOut);
+    // Output pin for connecting to pipeline
+    // All shader stages can connect to a pipeline node
+    stageOutputPinId = basePinId++;
+    Pin stageOut;
+    stageOut.id = stageOutputPinId;
+
+    // Name based on stage type
+    if (stage == VK_SHADER_STAGE_VERTEX_BIT) {
+        stageOut.name = "Vertex Stage";
+    } else if (stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
+        stageOut.name = "Fragment Stage";
+    } else if (stage == VK_SHADER_STAGE_GEOMETRY_BIT) {
+        stageOut.name = "Geometry Stage";
+    } else {
+        stageOut.name = "Stage Output";
     }
 
-    // Input pin for receiving from previous stage
-    if (stage == VK_SHADER_STAGE_FRAGMENT_BIT || stage == VK_SHADER_STAGE_GEOMETRY_BIT) {
-        stageInputPinId = basePinId++;
-        Pin stageIn;
-        stageIn.id = stageInputPinId;
-        stageIn.name = "Prev Stage";
-        stageIn.isInput = true;
-        stageIn.type = PinType::ShaderStageIn;
-        stageIn.stages = stage;
-        inputs.push_back(stageIn);
-    }
+    stageOut.isInput = false;
+    stageOut.type = PinType::ShaderStageOut;
+    stageOut.stages = stage;
+    outputs.push_back(stageOut);
 }
-
 
 void ShaderNode::UpdateName() {
     switch(stage) {
@@ -122,11 +119,8 @@ bool ShaderNode::CompileShader() {
 void ShaderNode::PopulateFromReflection() {
     if (!reflection) return;
 
-    // Clear ALL pins except stage connection pins
-    inputs.erase(std::ranges::remove_if(inputs,
-                                        [](const Pin& p) {
-                                            return p.type != PinType::ShaderStageIn;
-                                        }).begin(), inputs.end());
+    // Clear ALL pins except stage output pin (no stage input pins in new architecture)
+    inputs.clear();
 
     outputs.erase(std::ranges::remove_if(outputs,
                                          [](const Pin& p) {
@@ -136,8 +130,7 @@ void ShaderNode::PopulateFromReflection() {
     // Reset pin ID counter to avoid ID conflicts after recompilation
     int pinId = id * 1000;
 
-    // Skip past stage connection pin IDs if they exist
-    if (stageInputPinId >= 0) pinId = std::max(pinId, stageInputPinId + 1);
+    // Skip past stage output pin ID if it exists
     if (stageOutputPinId >= 0) pinId = std::max(pinId, stageOutputPinId + 1);
 
     // Add descriptor set bindings as input pins
@@ -190,7 +183,7 @@ void ShaderNode::PopulateFromReflection() {
         inputs.push_back(input);
     }
 
-    // Add vertex inputs
+    // Add vertex inputs (for vertex shaders only)
     if (stage == VK_SHADER_STAGE_VERTEX_BIT) {
         for (const auto& inputVar : reflection->getInputVariables()) {
             Pin input;
@@ -204,8 +197,8 @@ void ShaderNode::PopulateFromReflection() {
         }
     }
 
-    // NOTE: Fragment outputs are no longer exposed as pins
-    // Shaders now connect to pipelines, not directly to render targets
+    // NOTE: Fragment outputs and stage inputs are no longer exposed as pins
+    // Shaders now connect to pipelines via their stage output pin
 }
 
 void ShaderNode::Draw() {
@@ -235,22 +228,12 @@ void ShaderNode::Draw() {
 
     bool hascontent = false;
 
-    // Draw stage input pin first
-    if (stageInputPinId >= 0) {
-        hascontent = true;
-        ImNodes::BeginInputAttribute(stageInputPinId);
-        ImGui::TextColored(ImVec4(0.5f, 0.8f, 1.0f, 1.0f), "← Previous Stage");
-        ImNodes::EndInputAttribute();
-        //ImGui::Separator();
-    }
-
     // Group inputs by type
     std::vector<Pin*> descriptorInputs;
     std::vector<Pin*> pushConstantInputs;
     std::vector<Pin*> vertexInputs;
 
     for (auto& input : inputs) {
-        if (input.type == PinType::ShaderStageIn) continue; // Already drawn
         if (input.type == PinType::PushConstant)
             pushConstantInputs.push_back(&input);
         else if (input.type == PinType::VertexInput)
@@ -290,31 +273,14 @@ void ShaderNode::Draw() {
         }
     }
 
-    // Draw outputs
-    bool hasFragmentOutputs = false;
-    for (auto& output : outputs) {
-        if (output.type == PinType::FragmentOutput) {
-            if (!hasFragmentOutputs) {
-                hascontent = true;
-                if (!descriptorInputs.empty() || !pushConstantInputs.empty() || !vertexInputs.empty())
-                    ImGui::Separator();
-                ImGui::TextDisabled("Outputs:");
-                hasFragmentOutputs = true;
-            }
-            ImNodes::BeginOutputAttribute(output.id);
-            ImGui::Text("[%d] %s →", output.location, output.name.c_str());
-            ImNodes::EndOutputAttribute();
-        }
-    }
-
-    // Draw stage output pin last
+    // Draw stage output pin
     if (stageOutputPinId >= 0) {
-        hascontent = true;
-        if (!descriptorInputs.empty() || !pushConstantInputs.empty() || !vertexInputs.empty() || hasFragmentOutputs)
+        if (!descriptorInputs.empty() || !pushConstantInputs.empty() || !vertexInputs.empty())
             ImGui::Separator();
         ImNodes::BeginOutputAttribute(stageOutputPinId);
-        ImGui::TextColored(ImVec4(0.5f, 0.8f, 1.0f, 1.0f), "Next Stage →");
+        ImGui::TextColored(ImVec4(0.5f, 1.0f, 0.8f, 1.0f), "To Pipeline →");
         ImNodes::EndOutputAttribute();
+        hascontent = true;
     }
 
     if (!hascontent) {
