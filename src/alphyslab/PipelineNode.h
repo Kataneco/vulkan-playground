@@ -42,11 +42,9 @@ public:
     std::unordered_map<int, std::pair<uint32_t, uint32_t>> descriptorBindings; // pinId -> (set, binding)
     std::vector<int> descriptorInputPins;
 
-    // Compilation state
     bool isBuilt = false;
     std::string buildError;
 
-    // References to external systems
     VkDevice device;
     DescriptorLayoutCache* layoutCache = nullptr;
     PipelineLayoutCache* pipelineCache = nullptr;
@@ -63,14 +61,11 @@ public:
 
     const char* GetTypeName() const override { return "Pipeline"; }
 
-    // Pipeline building
     bool BuildPipeline();
     void DestroyPipeline();
 
-    // Update descriptor pins based on connected shaders
     void UpdateDescriptorPins(const std::vector<ShaderNode*>& shaders);
 
-    // Getters for connected resources
     bool HasValidShaders() const;
     std::vector<ShaderNode*> GetConnectedShaders() const;
 

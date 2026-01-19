@@ -293,7 +293,7 @@ void VulkanNodeEditor::Draw(CommandBuffer& commandBuffer) {
 
     if (ImGui::BeginMenuBar()) {
         if (ImGui::BeginMenu("Add")) {
-            if (ImGui::MenuItem("⚙ Pipeline")) AddPipelineNode();
+            if (ImGui::MenuItem("P Pipeline")) AddPipelineNode();
             ImGui::Separator();
             if (ImGui::MenuItem("RT Render Target")) AddRenderTargetNode();
             ImGui::Separator();

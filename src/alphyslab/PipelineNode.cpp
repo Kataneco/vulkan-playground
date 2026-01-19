@@ -223,7 +223,7 @@ void PipelineNode::Draw() {
     ImNodes::BeginNode(id);
 
     ImNodes::BeginNodeTitleBar();
-    ImGui::Text("⚙ Graphics Pipeline");
+    ImGui::Text("GP Graphics Pipeline");
     ImNodes::EndNodeTitleBar();
 
     // Status indicator
