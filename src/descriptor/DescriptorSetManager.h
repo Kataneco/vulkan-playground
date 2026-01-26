@@ -3,7 +3,7 @@
 
 class DescriptorAllocator {
 public:
-    explicit DescriptorAllocator(VkDevice device);
+    explicit DescriptorAllocator(VkDevice device, bool update = false);
     ~DescriptorAllocator();
     void destroy();
 
@@ -36,6 +36,8 @@ private:
     PoolSizes descriptorSizes;
     std::vector<VkDescriptorPool> usedPools;
     std::vector<VkDescriptorPool> freePools;
+
+    bool update = false; //TODO: This is useless for now
 
     friend class DescriptorBuilder;
 };

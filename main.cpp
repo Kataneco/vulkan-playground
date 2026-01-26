@@ -1,13 +1,38 @@
 #define KITTY_MAIN
+#include <future>
+
 #include "Engine.h"
+#include "imgui_internal.h"
+
 #include <random>
 
 #include "src/experimental/voxelizer.h"
+#include "src/alphyslab/node.h"
+#include <future>
+
+#include "ui.h"
+#include "TextEditor.h"
+#include "imstyles.h"
+
+static void glfw_error_callback(int error, const char* description)
+{
+    fprintf(stderr, "GLFW Error %d: %s\n", error, description);
+}
+
+static void check_vk_result(VkResult err)
+{
+    if (err == VK_SUCCESS)
+        return;
+    fprintf(stderr, "[vulkan] Error: VkResult = %d\n", err);
+    if (err < 0)
+        abort();
+}
 
 int main(int argc, char* argv[]) {
-    std::cout << "Haii wurld!! :3" << std::endl;
+    std::cout << "Hello, darlings!" << std::endl;
     srand(time(nullptr));
 
+    glfwSetErrorCallback(glfw_error_callback);
     Window::initialize();
 
     std::vector<const char*> instanceExtensions = Window::getRequiredInstanceExtensions();
@@ -18,7 +43,6 @@ int main(int argc, char* argv[]) {
     glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
     Window window(1600, 900);
     window.setWindowIcon(icon, icon);
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     DescriptorLayoutCache descriptorLayoutCache(device);
     DescriptorAllocator descriptorAllocator(device);
@@ -30,27 +54,6 @@ int main(int argc, char* argv[]) {
 
     Swapchain swapchain(device, window);
 
-    VkImageCreateInfo depthImageCreateInfo{
-            .imageType = VK_IMAGE_TYPE_2D,
-            .format = VK_FORMAT_D32_SFLOAT,
-            .extent = {swapchain.getExtent().width, swapchain.getExtent().height, 1},
-            .mipLevels = 1,
-            .arrayLayers = 1,
-            .samples = VK_SAMPLE_COUNT_1_BIT,
-            .tiling = VK_IMAGE_TILING_OPTIMAL,
-            .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
-    };
-
-    auto depthImage = resourceManager.createImage(depthImageCreateInfo, {.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, .usage = VMA_MEMORY_USAGE_GPU_ONLY});
-
-    VkImageViewCreateInfo depthImageViewCreateInfo{
-            .viewType = VK_IMAGE_VIEW_TYPE_2D,
-            .format = VK_FORMAT_D32_SFLOAT,
-            .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0,1,0,1}
-    };
-
-    depthImage->createImageView(depthImageViewCreateInfo);
-
     RenderPass renderPass(device);
     VkAttachmentDescription colorAttachment{};
     colorAttachment.format = swapchain.getImageFormat();
@@ -59,66 +62,29 @@ int main(int argc, char* argv[]) {
     colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
-    VkAttachmentDescription depthAttachment{};
-    depthAttachment.format = VK_FORMAT_D32_SFLOAT;
-    depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
     VkAttachmentReference colorAttachmentReference{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
-    VkAttachmentReference depthAttachmentReference{1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
 
     VkSubpassDescription subpass{};
     subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     subpass.colorAttachmentCount = 1;
     subpass.pColorAttachments = &colorAttachmentReference;
-    subpass.pDepthStencilAttachment = &depthAttachmentReference;
 
     VkSubpassDependency subpassDependency{};
     subpassDependency.srcSubpass = VK_SUBPASS_EXTERNAL;
     subpassDependency.dstSubpass = 0;
-    subpassDependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    subpassDependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     subpassDependency.srcAccessMask = 0;
-    subpassDependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-    subpassDependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    subpassDependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    subpassDependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
-    renderPass.create({colorAttachment, depthAttachment}, {subpass}, {subpassDependency});
+    renderPass.create({colorAttachment}, {subpass}, {subpassDependency});
 
     std::vector<Framebuffer> framebuffers;
     framebuffers.reserve(swapchain.getImageCount());
     for (size_t i = 0; i < swapchain.getImageCount(); ++i) {
         framebuffers.emplace_back(device, renderPass);
-        framebuffers.back().create({swapchain.getImageViews()[i], depthImage->getImageView()}, swapchain.getExtent().width, swapchain.getExtent().height);
+        framebuffers.back().create({swapchain.getImageViews()[i]}, swapchain.getExtent().width, swapchain.getExtent().height);
     }
-
-    auto vertCode = readFile("shaders/fullscreenQuad.vert.spv");
-    auto fragCode = readFile("shaders/debugvoxels.frag.spv");
-    ShaderModule vertModule(device, vertCode), fragModule(device, fragCode);
-    ShaderReflection vertexShader(vertCode), fragmentShader(fragCode);
-    VkPipelineLayout pipelineLayout = pipelineLayoutCache.createPipelineLayout(vertexShader+fragmentShader);
-
-    VkViewport viewport{};
-    viewport.width = static_cast<float>(swapchain.getExtent().width);
-    viewport.height = static_cast<float>(swapchain.getExtent().height);
-    viewport.minDepth = 0.0f;
-    viewport.maxDepth = 1.0f;
-
-    VkRect2D scissor{};
-    scissor.extent = swapchain.getExtent();
-
-    VkPipeline pipeline = GraphicsPipelineBuilder()
-            .setShaders(vertModule, fragModule)
-            .setViewportState(viewport, scissor)
-            .setRasterizationState(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE, 1.0f)
-            .setColorBlendState({alphaBlend})
-            .setDepthStencilState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_LESS)
-            .setLayout(pipelineLayout)
-            .setRenderPass(renderPass, 0)
-            .setDynamicState({VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR})
-            .build(device);
 
     std::vector<Semaphore> swapchainLockSemaphore;
     std::vector<Semaphore> renderLockSemaphore;
@@ -132,171 +98,134 @@ int main(int argc, char* argv[]) {
 
     std::vector<CommandBuffer> commandBuffers = commandPool.allocateCommandBuffers(swapchain.getImageCount());
 
-
-
     //Experimental
-    Mesh dragon = Mesh::loadObj("/home/honeywrap/Documents/kitten/assets/dragon.obj");
-    dragon.pushMesh(resourceManager, stagingBufferManager);
-
-    Mesh bunny = Mesh::loadObj("/home/honeywrap/Documents/kitten/assets/bunny.obj");
-    bunny.pushMesh(resourceManager, stagingBufferManager);
-
-    Mesh voxelia = Mesh::loadObj("/home/honeywrap/Documents/kitten/assets/vokselia_spawn/vokselia_spawn.obj");
-    voxelia.pushMesh(resourceManager, stagingBufferManager);
-
-    Texture voxeliaTexture = Texture::loadImage("/home/honeywrap/Documents/kitten/assets/vokselia_spawn/vokselia_spawn.png");
-    voxeliaTexture.pushTexture(resourceManager, stagingBufferManager);
-
-    CommandBuffer cont = commandPool.allocateCommandBuffer();
-    cont.begin();
-    ResourceBarrier::transitionImageLayout(cont, voxeliaTexture.image->getImage(), voxeliaTexture.image->getFormat(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    cont.end();
-    cont.submit(device.getGraphicsQueue());
-
     auto objectData = resourceManager.createBuffer({.size = sizeof(glm::mat4x4)*1024, .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT});
 
     auto cameraData = resourceManager.createBuffer({.size = sizeof(glm::mat4x4)*2, .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT});
 
-    auto voxelBuffer = resourceManager.createBuffer({.size = sizeof(Voxel)*1024*1024*64, .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT});
-    auto svoBuffer = resourceManager.createBuffer({.size = sizeof(OctreeNode)*1024*1024*64, .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT});
-    auto voxelCountBuffer = resourceManager.createBuffer({.size = sizeof(uint64_t), .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT}); //Atomix
-    auto nodeCountBuffer = resourceManager.createBuffer({.size = sizeof(uint64_t), .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT}); //Atomix
-    auto nodeGenerationBuffer = resourceManager.createBuffer({.size = sizeof(uint64_t), .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT}); //Atomix
-
-    VoxelizerData voxelizerConstants{
-        {0,0,0},
-        {256, 1.0, 8}
-    };
-
-    uint32_t padding = log2(voxelizerConstants.resolution.x);
-
-    uint64_t zero = 0;
-    //uint64_t one = 1;
-    //one <<= 32;
-    //one += 1;
-    uint64_t nodeCount = voxelizerConstants.resolution.z*voxelizerConstants.resolution.z*voxelizerConstants.resolution.z;
-    nodeCount <<= 32;
-    nodeCount += voxelizerConstants.resolution.z*voxelizerConstants.resolution.z*voxelizerConstants.resolution.z;
-    stagingBufferManager.stageBufferData(&zero, voxelCountBuffer->getBuffer(), sizeof(zero));
-    stagingBufferManager.stageBufferData(&nodeCount, nodeCountBuffer->getBuffer(), sizeof(nodeCount));
-    stagingBufferManager.flush();
-
-    VkDescriptorBufferInfo voxelDataSetInfos[] = {
-            {voxelCountBuffer->getBuffer(), 0, sizeof(uint32_t)},
-            {voxelBuffer->getBuffer(), 0, VK_WHOLE_SIZE},
-            {nodeCountBuffer->getBuffer(), 0, sizeof(uint32_t)},
-            {svoBuffer->getBuffer(), 0, VK_WHOLE_SIZE},
-            {nodeGenerationBuffer->getBuffer(), 0, sizeof(uint32_t)}
-    };
-
-    VkDescriptorSet voxelizerDataSet;
-    DescriptorBuilder(descriptorLayoutCache, descriptorAllocator)
-            .bind_buffer(0, &voxelDataSetInfos[0], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT)
-            .bind_buffer(1, &voxelDataSetInfos[1], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT)
-            .bind_buffer(2, &voxelDataSetInfos[2], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT)
-            .bind_buffer(3, &voxelDataSetInfos[3], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT)
-            .bind_buffer(4, &voxelDataSetInfos[4], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT)
-            .build(voxelizerDataSet);
-
-    //Object Specific
-    VkDescriptorSet dragonSet;
-    VkDescriptorBufferInfo dragonSetInfo = {objectData->getBuffer(), 0, sizeof(glm::mat4x4)};
-    DescriptorBuilder(descriptorLayoutCache, descriptorAllocator)
-            .bind_buffer(0, &dragonSetInfo, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)
-            .build(dragonSet);
-
-    VkDescriptorSet bunnySet;
-    VkDescriptorBufferInfo bunnySetInfo = {objectData->getBuffer(), sizeof(glm::mat4x4), sizeof(glm::mat4x4)};
-    DescriptorBuilder(descriptorLayoutCache, descriptorAllocator)
-            .bind_buffer(0, &bunnySetInfo, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)
-            .build(bunnySet);
-
-    VkDescriptorSet voxeliaSet;
-    VkDescriptorBufferInfo voxeliaSetInfo = {objectData->getBuffer(), sizeof(glm::mat4x4)*2, sizeof(glm::mat4x4)};
-    VkDescriptorImageInfo descriptorImageInfo = {voxeliaTexture.sampler->getSampler(), voxeliaTexture.image->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-    DescriptorBuilder(descriptorLayoutCache, descriptorAllocator)
-            .bind_buffer(0, &voxeliaSetInfo, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)
-            .bind_image(1, &descriptorImageInfo, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
-            .build(voxeliaSet);
-            
     VkDescriptorSet cameraSet;
     VkDescriptorBufferInfo cameraSetInfo = {cameraData->getBuffer(), 0, sizeof(glm::mat4x4)*2};
     DescriptorBuilder(descriptorLayoutCache, descriptorAllocator)
             .bind_buffer(0, &cameraSetInfo, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT)
             .build(cameraSet);
 
-    //Experimental
-    auto voxelVertCode = readFile("shaders/voxelize.vert.spv");
-    auto voxelGeomCode = readFile("shaders/voxelize.geom.spv");
-    auto voxelFragCode = readFile("shaders/voxelize.frag.spv");
-    auto voxelTextFragCode = readFile("shaders/voxelize_textured.frag.spv");
-    ShaderModule voxelVertModule(device, voxelVertCode), voxelGeomModule(device, voxelGeomCode), voxelFragModule(device, voxelFragCode), voxelTextFragModule(device, voxelTextFragCode);
-    ShaderReflection voxelVertexShader(voxelVertCode), voxelGeometryShader(voxelGeomCode), voxelFragmentShader(voxelFragCode), voxelTexturedFragmentShader(voxelTextFragCode);
-    VkPipelineLayout voxelizerPipelineLayout = pipelineLayoutCache.createPipelineLayout((voxelVertexShader+voxelGeometryShader)+voxelFragmentShader);
-    VkPipelineLayout voxelizerTexturedPipelineLayout = pipelineLayoutCache.createPipelineLayout((voxelVertexShader+voxelGeometryShader)+voxelTexturedFragmentShader);
+    //NOTE: Mega experimental
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImNodes::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // IF using Docking Branch
 
-    RenderPass voxelizerPass(device);
-    VkSubpassDescription voxelizerSubpass{};
-    voxelizerSubpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    // TODO: move styling to headers
+    globalStyleConfig();
 
-    VkSubpassDependency voxelizerDependency{};
-    voxelizerDependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-    voxelizerDependency.dstSubpass = 0;
-    voxelizerDependency.srcStageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-    voxelizerDependency.srcAccessMask = 0;
-    voxelizerDependency.dstStageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-    voxelizerDependency.dstAccessMask = 0;
+    //io.Fonts->AddFontDefault();
+    io.Fonts->AddFontFromFileTTF("/usr/share/fonts/TTF/HackNerdFontMono-Regular.ttf");
 
-    VkAttachmentDescription dummyAttachment{};
-    dummyAttachment.format = VK_FORMAT_R8G8B8A8_UNORM;
-    dummyAttachment.samples = VK_SAMPLE_COUNT_4_BIT;
-    dummyAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    dummyAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    dummyAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    // Setup Platform/Renderer backends
+    ImGui_ImplGlfw_InitForVulkan(window, true);
 
-    voxelizerPass.create({dummyAttachment}, {voxelizerSubpass}, {});
-    
-    VkViewport voxelizerViewport{};
-    voxelizerViewport.width = voxelizerConstants.resolution.x+padding;
-    voxelizerViewport.height = voxelizerConstants.resolution.x+padding;
-    voxelizerViewport.minDepth = 0.0f;
-    voxelizerViewport.maxDepth = 1.0f;
+    //void* instance_device[2] = {VkInstance(instance), VkDevice(device)};
+    //ImGui_ImplVulkan_LoadFunctions(VK_API_VERSION_1_3, [](const char *function_name, void *data) {void** idarr = *reinterpret_cast<void ***>(data); PFN_vkVoidFunction instanceAddr = vkGetInstanceProcAddr(static_cast<VkInstance>(idarr[0]), function_name); PFN_vkVoidFunction deviceAddr = vkGetDeviceProcAddr(static_cast<VkDevice>(idarr[1]), function_name); return deviceAddr ? deviceAddr : instanceAddr; }, &instance_device);
 
-    //TODO Use to autocull
-    VkRect2D voxelizerScissor{};
-    voxelizerScissor.extent = {static_cast<uint32_t>(voxelizerConstants.resolution.x+padding), static_cast<uint32_t>(voxelizerConstants.resolution.x+padding)};
+    ImGui_ImplVulkan_InitInfo init_info = {};
+    init_info.ApiVersion = VK_API_VERSION_1_3;
+    init_info.Instance = instance;
+    init_info.PhysicalDevice = device;
+    init_info.Device = device;
+    init_info.QueueFamily = device.getGraphicsFamily();
+    init_info.Queue = device.getGraphicsQueue();
+    init_info.DescriptorPoolSize = 512;
+    init_info.MinImageCount = swapchain.getImageCount();
+    init_info.ImageCount = swapchain.getImageCount();
+    init_info.Allocator = nullptr;
+    init_info.PipelineInfoMain.RenderPass = renderPass;
+    init_info.PipelineInfoMain.Subpass = 0;
+    init_info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+    init_info.CheckVkResultFn = check_vk_result;
+    ImGui_ImplVulkan_Init(&init_info);
 
-    VkPipelineRasterizationConservativeStateCreateInfoEXT pipelineRasterizationConservativeStateCreateInfo{};
-    pipelineRasterizationConservativeStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT;
-    pipelineRasterizationConservativeStateCreateInfo.conservativeRasterizationMode = VK_CONSERVATIVE_RASTERIZATION_MODE_OVERESTIMATE_EXT;
-    //pipelineRasterizationConservativeStateCreateInfo.extraPrimitiveOverestimationSize = 0.05f;
+    // Text editor
+    TextEditor editor;
+    auto lang = TextEditor::LanguageDefinition::GLSL();
+    editor.SetLanguageDefinition(lang);
 
-    VkPipeline voxelizerPipeline = GraphicsPipelineBuilder()
-            .setShaders(voxelVertModule, voxelGeomModule, voxelFragModule)
-            .setVertexInputState(Vertex::bindings(), Vertex::attributes())
-            .setViewportState(voxelizerViewport, voxelizerScissor)
-            .setRasterizationState(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE, 1.0f, &pipelineRasterizationConservativeStateCreateInfo)
-            .setLayout(voxelizerPipelineLayout)
-            .setRenderPass(voxelizerPass, 0)
+    // Node editor
+    VulkanNodeEditor nodeEditor(instance, device);
+    nodeEditor.SetTextEditor(&editor);  // NEW: Connect text editor to node editor
+
+    // Viewport
+    auto meowImage = resourceManager.createImage({
+          .imageType = VK_IMAGE_TYPE_2D,
+          .format = VK_FORMAT_B8G8R8A8_SRGB,
+          .extent = {2048, 2048, 1},
+          .mipLevels = 1,
+          .arrayLayers = 1,
+          .samples = VK_SAMPLE_COUNT_1_BIT,
+          .tiling = VK_IMAGE_TILING_OPTIMAL,
+          .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
+    });
+
+    meowImage->createImageView({.viewType = VK_IMAGE_VIEW_TYPE_2D, .format = meowImage->getFormat(), .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1}});
+
+    RenderPass meowRenderPass(device);
+    VkAttachmentDescription meowAttachment{};
+    meowAttachment.format = meowImage->getFormat();
+    meowAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    meowAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    meowAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    meowAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+    VkAttachmentReference meowAttachmentReference{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+
+    VkSubpassDescription meowSubpass{};
+    meowSubpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    meowSubpass.colorAttachmentCount = 1;
+    meowSubpass.pColorAttachments = &meowAttachmentReference;
+
+    VkSubpassDependency meowSubpassDependency{};
+    meowSubpassDependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+    meowSubpassDependency.dstSubpass = 0;
+    meowSubpassDependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    meowSubpassDependency.srcAccessMask = 0;
+    meowSubpassDependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    meowSubpassDependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+    meowRenderPass.create({meowAttachment}, {meowSubpass}, {meowSubpassDependency});
+
+    auto vertCode = readFile("shaders/fullscreenQuad.vert.spv");
+    auto fragCode = readFile("shaders/meow.frag.spv");
+    ShaderModule vertModule(device, vertCode), fragModule(device, fragCode);
+    ShaderReflection vertexShader(vertCode), fragmentShader(fragCode);
+    VkPipelineLayout pipelineLayout = pipelineLayoutCache.createPipelineLayout(vertexShader+fragmentShader);
+
+    VkViewport viewport{};
+    viewport.width = 2048;
+    viewport.height = 2048;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+
+    VkRect2D scissor{};
+    scissor.extent = {2048, 2048};
+
+    VkPipeline pipeline = GraphicsPipelineBuilder()
+            .setShaders(vertModule, fragModule)
+            .setViewportState(viewport, scissor)
+            .setRasterizationState(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE, 1.0f)
+            .setColorBlendState({alphaBlend})
+            .setLayout(pipelineLayout)
+            .setRenderPass(meowRenderPass, 0)
+            .setDynamicState({VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR})
             .build(device);
 
-    VkPipeline voxelizerTexturedPipeline = GraphicsPipelineBuilder()
-            .setShaders(voxelVertModule, voxelGeomModule, voxelTextFragModule)
-            .setVertexInputState(Vertex::bindings(), Vertex::attributes())
-            .setViewportState(voxelizerViewport, voxelizerScissor)
-            .setRasterizationState(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE, 1.0f, &pipelineRasterizationConservativeStateCreateInfo)
-            .setLayout(voxelizerTexturedPipelineLayout)
-            .setRenderPass(voxelizerPass, 0)
-            .build(device);
+    Framebuffer meowFramebuffer(device, meowRenderPass);
+    meowFramebuffer.create({meowImage->getImageView()}, static_cast<uint32_t>(viewport.width), static_cast<uint32_t>(viewport.height));
 
-    auto dummyImage = resourceManager.createImage({.imageType = VK_IMAGE_TYPE_2D, .format = VK_FORMAT_R8G8B8A8_UNORM, .extent = {static_cast<uint32_t>(voxelizerConstants.resolution.x+padding), static_cast<uint32_t>(voxelizerConstants.resolution.x+padding), 1}, .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_4_BIT, .tiling = VK_IMAGE_TILING_OPTIMAL, .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT}, {.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, .usage = VMA_MEMORY_USAGE_GPU_ONLY});
-    dummyImage->createImageView({.viewType = VK_IMAGE_VIEW_TYPE_2D, .format = VK_FORMAT_R8G8B8A8_UNORM, .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0,1,0,1}});
+    auto meowSampler = resourceManager.createSampler({});
 
-    Framebuffer imagelessFramebuffer(device, voxelizerPass);
-    imagelessFramebuffer.create({dummyImage->getImageView()}, voxelizerConstants.resolution.x+padding, voxelizerConstants.resolution.x+padding);
-
-
-
+    VkDescriptorSet meowTargetSet = ImGui_ImplVulkan_AddTexture(meowSampler->getSampler(), meowImage->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
     //Main rendering loop
     uint32_t frame = 0;
@@ -309,26 +238,11 @@ int main(int argc, char* argv[]) {
     //Camera
     float sensitivity = 0.1f;
     float lastX = 0.0f, lastY = 0.0f;
-    float speed = 0.5f;
-    float yaw = 0.0f, pitch = 0.0f;
     glm::vec3 camera = {0.0f, 0.0f, -1.0f};
-    bool focus = true;
-    float timeDebug = 1.0f;
-    uint32_t nodeGeneration = 0;
+    ImVec2 nyan; bool purr = false;
     while (!window.windowShouldClose()) {
         window.pollEvents(); //TODO bad design
         if (window.windowIconified()) continue; //Pause rendering if minimized
-        if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
-            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-            focus = false;
-        }
-        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
-            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-            focus = true;
-        }
-
-        if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS) timeDebug = 0.0;
-        else timeDebug = 1.0;
 
         // Delta time
         currentFrame = glfwGetTime();
@@ -353,104 +267,84 @@ int main(int argc, char* argv[]) {
         lastX = xpos;
         lastY = ypos;
 
-        yaw   += focus*xoffset;
-        pitch += focus*yoffset;
+        glm::mat4 view = glm::lookAt(camera, camera+glm::vec3(0,0,1), glm::vec3(0,1,0));
+        glm::mat4 projection = glm::ortho(0.0f, static_cast<float>(swapchain.getExtent().width), 0.0f, static_cast<float>(swapchain.getExtent().height), -100.0f, 100.0f);
 
-        if(pitch > 89.0f) pitch = 89.0f;
-        if(pitch < -89.0f) pitch = -89.0f;
+        // Start the Dear ImGui frame
+        ImGui_ImplVulkan_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
 
-        glm::vec3 direction;
-        direction.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
-        direction.y = sin(glm::radians(pitch));
-        direction.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+        ImGuiID dockspace_id = ImGui::GetID("Dockspace");
+        ImGui::DockSpaceOverViewport(dockspace_id, ImGui::GetMainViewport());
 
-        // Dynamic LOD
-        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) != GLFW_PRESS) {
-            voxelizerConstants.center = glm::round(camera+direction*0.5f);
+        static auto first_time = true;
+        if (first_time) {
+            first_time = false;
+            ImGui::DockBuilderRemoveNode(dockspace_id);
+            ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
+            ImGui::DockBuilderSetNodeSize(dockspace_id, ImGui::GetWindowSize());
+
+            ImGuiID dockspace_main_id = dockspace_id;
+            ImGuiID dock_right = ImGui::DockBuilderSplitNode(dockspace_main_id, ImGuiDir_Right, 0.42f, nullptr, &dockspace_main_id);
+            ImGuiID dock_down = ImGui::DockBuilderSplitNode(dock_right, ImGuiDir_Down, 0.42f, nullptr, &dock_right);
+            ImGuiID dock_text = ImGui::DockBuilderSplitNode(dockspace_main_id, ImGuiDir_Left, 0.95f, nullptr, &dockspace_main_id);
+
+            ImGui::DockBuilderDockWindow("Viewport", dock_down);
+            ImGui::DockBuilderDockWindow("Shader Graph Editor", dockspace_main_id);
+            ImGui::DockBuilderDockWindow("Pipeline Graph Editor", dockspace_main_id);
+            ImGui::DockBuilderDockWindow("Node Properties", dock_right);
+            ImGui::DockBuilderDockWindow("Hierarchy", dock_right);
+            ImGui::DockBuilderDockWindow("Text Editor", dock_text);
+            ImGui::DockBuilderFinish(dockspace_id);
         }
-
-        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) camera += speed*deltaTime*glm::normalize(direction);
-        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) camera -= speed*deltaTime*glm::normalize(direction);
-        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) camera -= speed*deltaTime*glm::normalize(glm::cross(glm::normalize(direction), glm::vec3(0.0f, 1.0f, 0.0f)));
-        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) camera += speed*deltaTime*glm::normalize(glm::cross(glm::normalize(direction), glm::vec3(0.0f, 1.0f, 0.0f)));
-        if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) camera.y += speed*deltaTime;
-        if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) camera.y -= speed*deltaTime;
-
-        glm::mat4 view = glm::lookAt(camera, camera+glm::normalize(direction), glm::vec3(0,1,0));
-        glm::mat4 projection = glm::perspective(glm::radians(90.0f), (float)swapchain.getExtent().width/(float)swapchain.getExtent().height, 0.01f, 1000.0f);
-        projection[1][1] *= -1;
 
         commandBuffer.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
+        nodeEditor.Draw(commandBuffer);
 
+        ImGui::Begin("Viewport");
+        ImVec2 viewportSize = ImGui::GetContentRegionAvail();
+        if (nodeEditor.getFocusedImage() == VK_NULL_HANDLE) {
+            ImGui::Image(meowTargetSet, viewportSize, ImVec2(0,0), ImVec2(viewportSize.x/2048, viewportSize.y/2048));
+        } else {
+            ImGui::Image(nodeEditor.getFocusedImage(), viewportSize, ImVec2(0,0), ImVec2(viewportSize.x/2048, viewportSize.y/2048));
+        }
+        //ImGui::Text("size = %d x %d", static_cast<int>(viewportSize.x), static_cast<int>(viewportSize.y));
+        ImGui::End();
 
-        //Experimental
-        glm::mat4 model = glm::scale(glm::vec3(1.0f,1.0f,1.0f))*glm::translate(glm::vec3(-0.5,0,0.5f))*glm::rotate(glm::radians(time*50.0f*timeDebug), glm::vec3(0.0f, 1.0f, 0.0f));
-        glm::mat4 modelb = glm::scale(glm::vec3(1.0f,1.0f,1.0f)*0.3f)*glm::rotate(glm::radians(time*-1.0f), glm::vec3(0.0f, 1.0f, 0.0f))*glm::translate(glm::vec3(3,1,0));
-        glm::mat4 modelc = glm::scale(2.0f*glm::vec3(1.0f,1.0f,1.0f))*glm::rotate(glm::radians(0.0f), glm::vec3(0.0f, 1.0f, 0.0f))*glm::translate(glm::vec3(0,0,0));
-        stagingBufferManager.stageBufferData(&model, objectData->getBuffer(), sizeof(glm::mat4));
-        stagingBufferManager.stageBufferData(&modelb, objectData->getBuffer(), sizeof(glm::mat4), sizeof(glm::mat4));
-        stagingBufferManager.stageBufferData(&modelc, objectData->getBuffer(), sizeof(glm::mat4), sizeof(glm::mat4)*2);
-        stagingBufferManager.stageBufferData(&view, cameraData->getBuffer(), sizeof(view));
-        stagingBufferManager.stageBufferData(&projection, cameraData->getBuffer(), sizeof(projection), sizeof(view));
-        stagingBufferManager.flush();
+        ImGui::Begin("Text Editor");
+        auto cpos = editor.GetCursorPosition();
 
-        voxelizerPass.begin(commandBuffer, imagelessFramebuffer, voxelizerScissor, {});
+        if (ImGui::Button("Save")) {
+            nodeEditor.SaveCurrentShaderEdit();
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("(Auto-saves on node switch)");
 
-        commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerPipeline);
-        commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerPipelineLayout, 1, {voxelizerDataSet});
-        commandBuffer.pushConstants(voxelizerPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_GEOMETRY_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(voxelizerConstants), &voxelizerConstants);
+        editor.Render("Shader Editor");
+        ImGui::End();
 
-        /*
-        commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerPipelineLayout, 0, {dragonSet});
-        commandBuffer.bindVertexBuffers(0, {dragon.vertexBuffer->getBuffer()}, {0});
-        commandBuffer.bindIndexBuffer(dragon.indexBuffer->getBuffer(), 0, VK_INDEX_TYPE_UINT32);
-        commandBuffer.drawIndexed(dragon.indices.size(), 1, 0, 0, 1);
-        */
+        ImGui::Render();
+        ImDrawData* main_draw_data = ImGui::GetDrawData();
 
-        commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerPipelineLayout, 0, {bunnySet});
-        commandBuffer.bindVertexBuffers(0, {bunny.vertexBuffer->getBuffer()}, {0});
-        commandBuffer.bindIndexBuffer(bunny.indexBuffer->getBuffer(), 0, VK_INDEX_TYPE_UINT32);
-        commandBuffer.drawIndexed(bunny.indices.size(), 1, 0, 0, 0);
-
-        commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerTexturedPipeline);
-        commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerTexturedPipelineLayout, 1, {voxelizerDataSet});
-        commandBuffer.pushConstants(voxelizerTexturedPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_GEOMETRY_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(voxelizerConstants), &voxelizerConstants);
-
-        commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, voxelizerTexturedPipelineLayout, 0, {voxeliaSet});
-        commandBuffer.bindVertexBuffers(0, {voxelia.vertexBuffer->getBuffer()}, {0});
-        commandBuffer.bindIndexBuffer(voxelia.indexBuffer->getBuffer(), 0, VK_INDEX_TYPE_UINT32);
-        commandBuffer.drawIndexed(voxelia.indices.size(), 1, 0, 0, 1);
-
-        voxelizerPass.end(commandBuffer);
-
-
-
-        renderPass.begin(commandBuffer, framebuffers[swapchainIndex], scissor, {{.color = {0.0f, 0.0f, 0.0f, 0.0f}}, {.depthStencil = {1.0f, 0}}});
+        meowRenderPass.begin(commandBuffer, meowFramebuffer, {.extent = {static_cast<uint32_t>(viewportSize.x)*0+2048, 2048+0*static_cast<uint32_t>(viewportSize.y)}}, {{.color = {0.0f, 0.0f, 0.0f, 0.0f}}, {.depthStencil = {1.0f, 0}}});
 
         vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
-        
-        //Experimental
+
+        glm::vec4 data = {viewportSize.x, viewportSize.y, time, deltaTime};
         commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-        commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, {cameraSet, voxelizerDataSet});
-        commandBuffer.pushConstants(pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(voxelizerConstants), &voxelizerConstants);
-        
-        glm::vec4 res(swapchain.getExtent().width, swapchain.getExtent().height, 0, 0);
-        commandBuffer.pushConstants(pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(voxelizerConstants), sizeof(res), &res);
-        vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+        commandBuffer.pushConstants(pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(data), &data);
+        commandBuffer.draw(3);
+
+        meowRenderPass.end(commandBuffer);
+
+        renderPass.begin(commandBuffer, framebuffers[swapchainIndex], {.extent = swapchain.getExtent()}, {{.color = {0.0f, 0.0f, 0.0f, 0.0f}}, {.depthStencil = {1.0f, 0}}});
+
+        ImGui_ImplVulkan_RenderDrawData(main_draw_data, commandBuffer);
 
         renderPass.end(commandBuffer);
-
-        //Experimental
-        ResourceBarrier::bufferMemoryBarrier(commandBuffer, voxelCountBuffer->getBuffer(), 0, sizeof(uint64_t), VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_TRANSFER_WRITE_BIT);
-
-        commandBuffer.fillBuffer(voxelCountBuffer->getBuffer(), 0, VK_WHOLE_SIZE, 0);
-
-        commandBuffer.fillBuffer(nodeCountBuffer->getBuffer(), 0, VK_WHOLE_SIZE, voxelizerConstants.resolution.z*voxelizerConstants.resolution.z*voxelizerConstants.resolution.z);
-        commandBuffer.fillBuffer(svoBuffer->getBuffer(), 0, voxelizerConstants.resolution.z*voxelizerConstants.resolution.z*voxelizerConstants.resolution.z*sizeof(OctreeNode), 0);
-        nodeGeneration++;
-        commandBuffer.fillBuffer(nodeGenerationBuffer->getBuffer(), 0, VK_WHOLE_SIZE, nodeGeneration);
 
         commandBuffer.end();
 
@@ -460,15 +354,9 @@ int main(int argc, char* argv[]) {
             framebuffers.clear();
             framebuffers.reserve(swapchain.getImageCount());
 
-            //depth bullshit
-            depthImageCreateInfo.extent = {swapchain.getExtent().width, swapchain.getExtent().height, 1};
-            depthImage = resourceManager.createImage(depthImageCreateInfo, {.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, .usage = VMA_MEMORY_USAGE_GPU_ONLY});
-            depthImageViewCreateInfo.image = depthImage->getImage();
-            depthImage->createImageView(depthImageViewCreateInfo);
-
             for (int i = 0; i < swapchain.getImageCount(); ++i) {
                 framebuffers.emplace_back(device, renderPass);
-                framebuffers.back().create({swapchain.getImageViews()[i], depthImage->getImageView()}, swapchain.getExtent().width, swapchain.getExtent().height);
+                framebuffers.back().create({swapchain.getImageViews()[i]}, swapchain.getExtent().width, swapchain.getExtent().height);
             }
 
             viewport.width = static_cast<float>(swapchain.getExtent().width);
@@ -481,8 +369,11 @@ int main(int argc, char* argv[]) {
 
     device.waitIdle();
 
-    vkDestroyPipeline(device, voxelizerTexturedPipeline, nullptr);
-    vkDestroyPipeline(device, voxelizerPipeline, nullptr);
+    ImGui_ImplVulkan_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImNodes::DestroyContext();
+    ImGui::DestroyContext();
+
     vkDestroyPipeline(device, pipeline, nullptr);
     //Window::terminate();
     return 0;

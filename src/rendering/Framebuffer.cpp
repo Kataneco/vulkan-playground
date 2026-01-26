@@ -3,9 +3,7 @@
 Framebuffer::Framebuffer(VkDevice device, VkRenderPass renderPass) : device(device), renderPass(renderPass) {}
 
 Framebuffer::~Framebuffer() {
-    if (framebuffer != VK_NULL_HANDLE) {
-        vkDestroyFramebuffer(device, framebuffer, nullptr);
-    }
+    destroy();
 }
 
 Framebuffer::Framebuffer(Framebuffer &&other) noexcept : device(other.device), renderPass(other.renderPass), framebuffer(other.framebuffer) {
@@ -25,7 +23,8 @@ Framebuffer &Framebuffer::operator=(Framebuffer &&other) noexcept {
     return *this;
 }
 
-void Framebuffer::create(const std::vector<VkImageView> &attachments, uint32_t width, uint32_t height, uint32_t layers) {
+void Framebuffer::create(const std::vector<VkImageView> &attachments, uint32_t w, uint32_t h, uint32_t l) {
+    width = w; height = h; layers = l;
     VkFramebufferCreateInfo framebufferCreateInfo{};
     framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
     framebufferCreateInfo.renderPass = renderPass;
@@ -45,4 +44,12 @@ void Framebuffer::create(const std::vector<VkImageView> &attachments, uint32_t w
     }
 
     vkCreateFramebuffer(device, &framebufferCreateInfo, nullptr, &framebuffer);
+}
+
+void Framebuffer::destroy() {
+    if (framebuffer != VK_NULL_HANDLE) {
+        vkDestroyFramebuffer(device, framebuffer, nullptr);
+        framebuffer = VK_NULL_HANDLE;
+        width = 0; height = 0; layers = 0;
+    }
 }

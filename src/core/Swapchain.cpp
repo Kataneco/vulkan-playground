@@ -53,7 +53,7 @@ void Swapchain::create() {
     swapchainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     swapchainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     swapchainCreateInfo.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-    swapchainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
+    swapchainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
     swapchainCreateInfo.presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
     swapchainCreateInfo.clipped = VK_TRUE;
     swapchainCreateInfo.oldSwapchain = swapchain;
@@ -121,13 +121,13 @@ uint32_t Swapchain::present(uint32_t imageIndex, VkSemaphore waitSemaphore) {
 
     VkResult result = vkQueuePresentKHR(device.graphicsQueue, &presentInfo);
 
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || window.getWindowExtent().width != extent.width || window.getWindowExtent().height != extent.height) {
         //create(extent.width, extent.height);
         device.waitIdle();
         create();
         return 1;
     } else if (result != VK_SUCCESS) {
-        //death
+        std::cerr << "what the fuck" << std::endl;
         return UINT32_MAX;
     }
     return 0;

@@ -3,11 +3,13 @@
 
 VkShaderModule createShaderModule(VkDevice device, size_t codeSize, const char* code);
 VkShaderModule createShaderModule(VkDevice device, const std::string &code);
+VkShaderModule createShaderModule(VkDevice device, const std::vector<uint32_t> &code);
 
 class ShaderModule {
 public:
     ShaderModule(VkDevice device, size_t codeSize, const char* code);
     ShaderModule(VkDevice device, const std::string &code);
+    ShaderModule(VkDevice device, const std::vector<uint32_t> &code);
     ~ShaderModule();
 
     ShaderModule(const ShaderModule &) = delete;

@@ -8,8 +8,12 @@ find_package(glfw3)
 
 include_directories(SYSTEM lib)
 include_directories(src)
+include_directories(lib/imgui-docking)
+include_directories(lib/imgui-docking/backends)
+include_directories(lib/imnodes)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -flto -march=native")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -flto -march=native")
+add_compile_definitions(KITTEN_MEMORY_DEBUG)
 
 add_executable(kitten main.cpp
         src/core/VulkanInstance.cpp
@@ -78,9 +82,40 @@ add_executable(kitten main.cpp
         src/resource/Texture.h
         src/experimental/voxelizer.cpp
         src/experimental/voxelizer.h
+        src/alphyslab/node.cpp
+        src/alphyslab/node.h
+        ui.h
+        lib/imgui-docking/imgui.cpp
+        lib/imgui-docking/imgui_demo.cpp
+        lib/imgui-docking/imgui_draw.cpp
+        lib/imgui-docking/imgui_internal.h
+        lib/imgui-docking/imgui_tables.cpp
+        lib/imgui-docking/imgui_widgets.cpp
+        lib/imgui-docking/imstb_rectpack.h
+        lib/imgui-docking/imstb_textedit.h
+        lib/imgui-docking/imstb_truetype.h
+        lib/imgui-docking/backends/imgui_impl_glfw.cpp
+        lib/imgui-docking/backends/imgui_impl_vulkan.cpp
+        lib/imnodes/imnodes.cpp
+        lib/imnodes/imnodes_internal.h
+        lib/TextEditor.cpp
+        lib/TextEditor.h
+        lib/imgui-docking/misc/cpp/imgui_stdlib.cpp
+        src/shader/ShaderCompiler.cpp
+        src/shader/ShaderCompiler.h
+        ui.cpp
+        imstyles.h
+        src/alphyslab/ResourceNode.cpp
+        src/alphyslab/ResourceNode.h
+        src/alphyslab/ShaderNode.cpp
+        src/alphyslab/ShaderNode.h
+        src/alphyslab/FramebufferNode.cpp
+        src/alphyslab/FramebufferNode.h
+        src/alphyslab/PipelineNode.cpp
+        src/alphyslab/PipelineNode.h
 )
 
-target_link_libraries(kitten glfw)
+target_link_libraries(kitten glfw X11 shaderc_shared)
 
 #Shader compilation
 find_program(GLSLC_EXECUTABLE glslc)

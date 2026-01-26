@@ -73,7 +73,7 @@ bool DescriptorAllocator::allocate(VkDescriptorSet *set, VkDescriptorSetLayout l
     return false;
 }
 
-DescriptorAllocator::DescriptorAllocator(VkDevice device) : device(device) {}
+DescriptorAllocator::DescriptorAllocator(VkDevice device, bool update) : device(device), update(update) {}
 
 DescriptorAllocator::~DescriptorAllocator() {
     destroy();

@@ -12,6 +12,7 @@ public:
     Framebuffer &operator=(Framebuffer &&other) noexcept;
 
     void create(const std::vector<VkImageView> &attachments, uint32_t width, uint32_t height, uint32_t layers = 1);
+    void destroy();
 
     operator VkFramebuffer() const { return framebuffer; }
 
